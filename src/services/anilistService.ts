@@ -27,11 +27,11 @@ const LIST_QUERY = `
         description(asHtml: false)
         trailer { id site }
         nextAiringEpisode { episode airingAt timeUntilAiring }
-        relations { edges { node { id title { romaji english } format type relation } } }
+        
         recommendations { nodes { media { id title { romaji english } coverImage { large } format averageScore } } }
         characters { edges { role node { id name { full native } image { large } } } }
-        externalLinks { url site }
-        rankings { rank type season year }
+        
+        
       }
     }
   }
@@ -64,11 +64,11 @@ const SINGLE_QUERY = `
       endDate { year month day }
       trailer { id site }
       nextAiringEpisode { episode airingAt timeUntilAiring }
-      relations { edges { node { id title { romaji english } format type relation } } }
+      
       recommendations { nodes { media { id title { romaji english } coverImage { large } format averageScore } } }
       characters { edges { role node { id name { full native } image { large } } } }
-      externalLinks { url site }
-      rankings { rank type season year }
+      
+      
     }
   }
 `;
@@ -104,8 +104,8 @@ interface AnilistMedia {
   relations?: { edges: { node: { id: number; title: { romaji: string; english: string }; format?: string; type?: string; relation?: string } }[] };
   recommendations?: { nodes: { media: { id: number; title: { romaji: string; english: string }; coverImage: { large: string }; format?: string; averageScore?: number } }[] };
   characters?: { edges: { role?: string; node: { id: number; name: { full: string; native: string }; image: { large: string } } }[] };
-  externalLinks?: { url: string; site: string; formatted: string }[];
-  rankings?: { rank: number; place: string; type: string; season?: number; year?: number }[];
+  
+  
 }
 
 interface AnilistPage<T> {
@@ -216,7 +216,7 @@ export function mapMedia(media: AnilistMedia): AnimeResult {
         role: c.role,
       }))
       .filter(Boolean),
-    externalLinks: media.externalLinks?.map((l) => ({ url: l.url, site: l.site })),
+    
   };
 }
 
