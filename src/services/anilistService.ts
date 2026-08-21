@@ -2,9 +2,9 @@
 const ANILIST_URL = 'https://graphql.anilist.co';
 
 const LIST_QUERY = `
-  query($search: String, $page: Int = 1, $perPage: Int = 20, $genre: String, $year: String, $format: MediaFormat, $status: MediaStatus, $sort: [MediaSort] = TRENDING_DESC) {
+  query($search: String, $page: Int = 1, $perPage: Int = 20, $genre: String, $year: String, $season: MediaSeason, $format: MediaFormat, $status: MediaStatus, $sort: [MediaSort] = TRENDING_DESC) {
     Page(page: $page, perPage: $perPage) {
-      media(search: $search, type: ANIME, genre: $genre, startDate_like: $year, format: $format, status: $status, sort: $sort) {
+      media(search: $search, type: ANIME, genre: $genre, season: $season, seasonYear: $year, startDate_like: $year, format: $format, status: $status, sort: $sort) {
         id
         title { romaji english native }
         coverImage { large extraLarge color }
