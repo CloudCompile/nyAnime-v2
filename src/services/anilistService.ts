@@ -2,7 +2,7 @@
 const ANILIST_URL = 'https://graphql.anilist.co';
 
 const LIST_QUERY = `
-  query($search: String, $page: Int = 1, $perPage: Int = 20, $genre: String, $year: String, $season: MediaSeason, $format: MediaFormat, $status: MediaStatus, $sort: [MediaSort] = TRENDING_DESC) {
+  query($search: String, $page: Int = 1, $perPage: Int = 20, $genre: String, $year: Int, $season: MediaSeason, $format: MediaFormat, $status: MediaStatus, $sort: [MediaSort] = TRENDING_DESC) {
     Page(page: $page, perPage: $perPage) {
       media(search: $search, type: ANIME, genre: $genre, season: $season, seasonYear: $year, startDate_like: $year, format: $format, status: $status, sort: $sort) {
         id
@@ -243,7 +243,7 @@ export const anilistService = {
 
   async getSeasonal(year: number, season: 'WINTER' | 'SPRING' | 'SUMMER' | 'FALL'): Promise<AnilistPage<AnimeResult>> {
     const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, {
-      page, perPage, season, seasonYear: String(year), sort: 'TRENDING_DESC',
+      page, perPage, season, seasonYear: year, sort: 'TRENDING_DESC',
     });
     return { page, perPage, totalPages: 1, hasNextPage: false, total: data.media.length, media: data.media.map(mapMedia) };
   },
