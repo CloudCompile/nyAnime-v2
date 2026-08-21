@@ -74,7 +74,7 @@ const SINGLE_QUERY = `
 `;
 
 const GENRE_QUERY = `
-  query { MediaGenreCollection }
+  query { GenreCollection }
 `;
 
 interface AnilistMedia {
@@ -151,7 +151,7 @@ export interface AnimeResult {
 async function anilistFetch<T>(query: string, variables: Record<string, any> = {}): Promise<T> {
   const response = await fetch(ANILIST_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'User-Agent': 'NyAnime/1.0' },
     body: JSON.stringify({ query, variables }),
   });
   if (!response.ok) throw new Error(`AniList API error: ${response.status}`);
@@ -254,8 +254,8 @@ export const anilistService = {
   },
 
   async getGenres(): Promise<string[]> {
-    const data = await anilistFetch<{ MediaGenreCollection: string[] }>(GENRE_QUERY);
-    return data.MediaGenreCollection || [];
+    const data = await anilistFetch<{ GenreCollection: string[] }>(GENRE_QUERY);
+    return data.GenreCollection || [];
   },
 
   async getByGenre(genre: string, page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
