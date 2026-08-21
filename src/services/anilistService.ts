@@ -4,7 +4,7 @@ const ANILIST_URL = 'https://graphql.anilist.co';
 const LIST_QUERY = `
   query($search: String, $page: Int = 1, $perPage: Int = 20, $genre: String, $year: Int, $season: MediaSeason, $format: MediaFormat, $status: MediaStatus, $sort: [MediaSort] = TRENDING_DESC) {
     Page(page: $page, perPage: $perPage) {
-      media(search: $search, type: ANIME, genre: $genre, season: $season, seasonYear: $year, startDate_like: $year, format: $format, status: $status, sort: $sort) {
+      media(search: $search, type: ANIME, genre: $genre, season: $season, seasonYear: $year,  format: $format, status: $status, sort: $sort) {
         id
         title { romaji english native }
         coverImage { large extraLarge color }
@@ -27,11 +27,11 @@ const LIST_QUERY = `
         description(asHtml: false)
         trailer { id site }
         nextAiringEpisode { episode airingAt timeUntilAiring }
-        relationships { edges { node { id title { romaji english } format type relationType } } }
+        relations { edges { node { id title { romaji english } format type relation } } }
         recommendations { nodes { media { id title { romaji english } coverImage { large } format averageScore } } }
         characters { edges { role node { id name { full native } image { large } } } }
-        externalLinks { url site formatted }
-        rankings { rank place type season year }
+        externalLinks { url site }
+        rankings { rank type season year }
       }
     }
   }
@@ -64,11 +64,11 @@ const SINGLE_QUERY = `
       endDate { year month day }
       trailer { id site }
       nextAiringEpisode { episode airingAt timeUntilAiring }
-      relationships { edges { node { id title { romaji english } format type relationType } } }
+      relations { edges { node { id title { romaji english } format type relation } } }
       recommendations { nodes { media { id title { romaji english } coverImage { large } format averageScore } } }
       characters { edges { role node { id name { full native } image { large } } } }
-      externalLinks { url site formatted }
-      rankings { rank place type season year }
+      externalLinks { url site }
+      rankings { rank type season year }
     }
   }
 `;
@@ -101,7 +101,7 @@ interface AnilistMedia {
   description?: string;
   trailer?: { id: string; site: string };
   nextAiringEpisode?: { episode: number; airingAt: number; timeUntilAiring: number };
-  relationships?: { edges: { node: { id: number; title: { romaji: string; english: string }; format?: string; type?: string; relationType?: string } }[] };
+  relations?: { edges: { node: { id: number; title: { romaji: string; english: string }; format?: string; type?: string; relation?: string } }[] };
   recommendations?: { nodes: { media: { id: number; title: { romaji: string; english: string }; coverImage: { large: string }; format?: string; averageScore?: number } }[] };
   characters?: { edges: { role?: string; node: { id: number; name: { full: string; native: string }; image: { large: string } } }[] };
   externalLinks?: { url: string; site: string; formatted: string }[];
@@ -142,7 +142,7 @@ export interface AnimeResult {
   description?: string;
   trailerId?: string;
   nextAiringEpisode?: { episode: number; airingAt: number };
-  relationships?: { id: number; title: string; format?: string; relationType?: string }[];
+  relations?: { id: number; title: string; format?: string; relation?: string }[];
   recommendations?: { id: number; title: string; image?: string; format?: string; score?: number }[];
   characters?: { id: number; name: string; image?: string; role?: string }[];
   externalLinks?: { url: string; site: string }[];
@@ -192,11 +192,11 @@ export function mapMedia(media: AnilistMedia): AnimeResult {
     nextAiringEpisode: media.nextAiringEpisode
       ? { episode: media.nextAiringEpisode.episode, airingAt: media.nextAiringEpisode.airingAt }
       : undefined,
-    relationships: media.relationships?.edges?.map((e) => ({
+    relations: media.relations?.edges?.map((e) => ({
       id: e.node.id,
       title: e.node.title.english || e.node.title.romaji,
       format: e.node.format,
-      relationType: e.node.relationType,
+      relation: e.node.relation,
     })),
     recommendations: media.recommendations?.nodes
       ?.map((r) => r.media)
@@ -243,7 +243,7 @@ export const anilistService = {
 
   async getSeasonal(year: number, season: 'WINTER' | 'SPRING' | 'SUMMER' | 'FALL'): Promise<AnilistPage<AnimeResult>> {
     const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, {
-      page, perPage, season, seasonYear: year, sort: 'TRENDING_DESC',
+      page, perPage, season, seasonYear: String(year), sort: 'TRENDING_DESC',
     });
     return { page, perPage, totalPages: 1, hasNextPage: false, total: data.media.length, media: data.media.map(mapMedia) };
   },
