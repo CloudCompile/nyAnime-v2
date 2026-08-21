@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { fetchVideoSources, VideoSource } from '../services/videoSourceService';
 import { toast } from '@/hooks/use-toast';
 import { ScrapingService } from '../services/scrapingService';
-import { getSourcesFromMultipleProviders, getEpisodeSources, PROVIDERS } from '../services/consumetService';
+
 
 export const useVideoPlayer = (episodeId: string) => {
   const [sources, setSources] = useState<VideoSource[]>([]);
@@ -55,7 +55,7 @@ export const useVideoPlayer = (episodeId: string) => {
       // Get anime info first to get the title
       let animeTitle = '';
       try {
-        const response = await fetch(`https://api.jikan.moe/v4/anime/${animeId}`);
+        const response = await (async()=>{const r=await fetch('https://graphql.anilist.co',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:'query{Media(id:'+animeId+'){id title{romaji}}}'})});return r.json()})();;
         if (response.ok) {
           const data = await response.json();
           animeTitle = data.data?.title || '';
@@ -282,7 +282,7 @@ export const useVideoPlayer = (episodeId: string) => {
       const episodeNumber = parseInt(match[2]);
       
       // Try to get a title for the anime from MAL
-      const animeResponse = await fetch(`https://api.jikan.moe/v4/anime/${animeId}`);
+      const animeResponse = await (async()=>{const r=await fetch('https://graphql.anilist.co',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:'query{Media(id:'+animeId+'){id title{romaji}}}'})});return r.json()})();;
       if (!animeResponse.ok) return;
       
       const animeData = await animeResponse.json();
@@ -424,7 +424,7 @@ export const useVideoPlayer = (episodeId: string) => {
       
       // If we don't have a title yet, try to get it
       if (!animeTitle) {
-        const animeResponse = await fetch(`https://api.jikan.moe/v4/anime/${animeId}`);
+        const animeResponse = await (async()=>{const r=await fetch('https://graphql.anilist.co',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:'query{Media(id:'+animeId+'){id title{romaji}}}'})});return r.json()})();;
         if (!animeResponse.ok) return;
         
         const animeData = await animeResponse.json();

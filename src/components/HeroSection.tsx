@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Play, ChevronRight, Pause } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTrendingAnime, usePopularAnime } from '../hooks/useAnimeData';
-import { AnimeData } from '../services/animeService';
+import { AnimeData } from '../hooks/useAnimeData';
 
 const HeroSection = () => {
   const { data: trendingAnime = [], isLoading: trendingLoading } = useTrendingAnime();

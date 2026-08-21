@@ -1,22 +1,57 @@
 
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  fetchTrendingAnime, 
-  fetchPopularAnime, 
-  fetchSeasonalAnime, 
-  getAnimeById,
-  getSimilarAnime,
-  searchAnime,
-  AnimeData
-} from '../services/animeService';
 import { useQuery } from '@tanstack/react-query';
+import { anilistService, AnimeResult } from '../services/anilistService';
+
+// Map AnimeResult to the AnimeData interface used by components
+export interface AnimeData {
+  id: number;
+  title: string;
+  image: string;
+  category: string;
+  rating: string;
+  year: string;
+  episodes?: number;
+  similarAnime?: AnimeData[];
+  synopsis?: string;
+  trailerId?: string;
+  type?: string;
+  status?: string;
+  title_english?: string;
+  duration?: string;
+  airing?: boolean;
+  airingEpisodes?: number;
+}
+
+function mapToAnimeData(anime: AnimeResult): AnimeData {
+  return {
+    id: anime.id,
+    title: anime.title,
+    image: anime.image || '',
+    category: (anime.genres?.join(', ') || 'Unknown'),
+    rating: anime.score ? anime.score.toString() : 'N/A',
+    year: anime.seasonYear?.toString() || anime.startDate?.substring(0, 4) || 'Unknown',
+    episodes: anime.episodes,
+    synopsis: anime.description,
+    trailerId: anime.trailerId,
+    type: anime.format || 'TV',
+    status: anime.status,
+    title_english: anime.titleEnglish,
+    duration: anime.duration ? `${anime.duration} min` : undefined,
+    airing: anime.status === 'RELEASING',
+    airingEpisodes: anime.nextAiringEpisode?.episode,
+  };
+}
 
 // Custom hook for trending anime
 export const useTrendingAnime = () => {
   return useQuery({
     queryKey: ['trendingAnime'],
-    queryFn: fetchTrendingAnime,
-    staleTime: 5 * 60 * 1000, // 5 minutes cache
+    queryFn: async () => {
+      const data = await anilistService.getTrending(1, 25);
+      return data.media.map(mapToAnimeData);
+    },
+    staleTime: 5 * 60 * 1000,
   });
 };
 
@@ -24,85 +59,109 @@ export const useTrendingAnime = () => {
 export const usePopularAnime = () => {
   return useQuery({
     queryKey: ['popularAnime'],
-    queryFn: fetchPopularAnime,
-    staleTime: 5 * 60 * 1000, // 5 minutes cache
+    queryFn: async () => {
+      const data = await anilistService.getPopular(1, 25);
+      return data.media.map(mapToAnimeData);
+    },
+    staleTime: 5 * 60 * 1000,
   });
 };
 
 // Custom hook for seasonal anime
 export const useSeasonalAnime = () => {
+  const currentYear = new Date().getFullYear();
+  const seasons: ('WINTER' | 'SPRING' | 'SUMMER' | 'FALL')[] = ['WINTER', 'SPRING', 'SUMMER', 'FALL'];
+  const currentSeason = seasons[new Date().getMonth() / 3 | 0] as any;
+
   return useQuery({
-    queryKey: ['seasonalAnime'],
-    queryFn: fetchSeasonalAnime,
-    staleTime: 5 * 60 * 1000, // 5 minutes cache
+    queryKey: ['seasonalAnime', currentYear, currentSeason],
+    queryFn: async () => {
+      const data = await anilistService.getSeasonal(currentYear, currentSeason);
+      return data.media.map(mapToAnimeData);
+    },
+    staleTime: 5 * 60 * 1000,
   });
 };
 
-// Search hook with pagination - Modified to ensure enabled for genre searches
+// Search hook
 export const useAnimeSearch = (
   query?: string,
   genre?: string,
-  year?: string,
-  status?: string,
+  _year?: string,
+  _status?: string,
   page: number = 1
 ) => {
   return useQuery({
-    queryKey: ['animeSearch', query, genre, year, status, page],
-    queryFn: () => searchAnime(query, genre, year, status, page),
-    staleTime: 5 * 60 * 1000, // 5 minutes cache
-    enabled: !!(query || genre || year || status), // Only run query if at least one search parameter is provided
+    queryKey: ['animeSearch', query, genre, page],
+    queryFn: async () => {
+      if (genre) {
+        const data = await anilistService.getByGenre(genre, page, 25);
+        return { anime: data.media.map(mapToAnimeData), pagination: { hasNextPage: false, totalPages: 1 } };
+      }
+      if (query) {
+        const data = await anilistService.search(query, page, 25);
+        return { anime: data.media.map(mapToAnimeData), pagination: { hasNextPage: false, totalPages: 1 } };
+      }
+      return { anime: [], pagination: { hasNextPage: false, totalPages: 0 } };
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled: !!(query || genre),
   });
 };
 
 // Get anime by ID
 export const useAnimeById = (id: number) => {
-  // Add console log for debugging purposes
-  console.log(`useAnimeById called with ID: ${id}`);
-  
   return useQuery({
     queryKey: ['anime', id],
-    queryFn: () => {
-      console.log(`Fetching anime data for ID: ${id}`);
-      return getAnimeById(id);
+    queryFn: async () => {
+      const data = await anilistService.getById(id);
+      return data ? mapToAnimeData(data) : null;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes cache
+    staleTime: 5 * 60 * 1000,
     enabled: id > 0,
   });
 };
 
-// Custom hook for getting similar anime
+// Similar/recommendations
 export const useSimilarAnime = (id: number) => {
   return useQuery({
     queryKey: ['similarAnime', id],
-    queryFn: () => getSimilarAnime(id),
-    staleTime: 5 * 60 * 1000, // 5 minutes cache
+    queryFn: async () => {
+      const data = await anilistService.getById(id);
+      if (!data?.recommendations) return [];
+      return data.recommendations.map(r => ({
+        id: r.id,
+        title: r.title,
+        image: r.image || '',
+        category: '',
+        rating: r.score?.toString() || 'N/A',
+        year: '',
+      }));
+    },
+    staleTime: 5 * 60 * 1000,
     enabled: id > 0,
-    retry: 1, // Only retry once to avoid excessive API calls
-    retryDelay: 2000, // Wait 2 seconds before retrying
+    retry: 1,
   });
 };
 
-// Main hook that combines all anime data sources
+// Genres list
+export const fetchGenres = async (): Promise<string[]> => {
+  return anilistService.getGenres();
+};
+
+// Main hook combining all data
 export const useAnimeData = () => {
   const { data: trendingAnime = [], isLoading: trendingLoading } = useTrendingAnime();
   const { data: popularAnime = [], isLoading: popularLoading } = usePopularAnime();
   const { data: seasonalAnime = [], isLoading: seasonalLoading } = useSeasonalAnime();
-  
+
   const isLoading = trendingLoading || popularLoading || seasonalLoading;
   const allAnime = [...(trendingAnime || []), ...(popularAnime || []), ...(seasonalAnime || [])];
-  
-  // For backward compatibility, maintain getAnimeById
+
   const getAnimeByIdLocal = useCallback((id: number): AnimeData | null => {
-    console.log(`Looking for anime with ID: ${id} in local cache`);
-    const anime = allAnime.find(anime => anime.id === id);
-    if (anime) {
-      console.log(`Found anime in local cache: ${anime.title}`);
-    } else {
-      console.log(`Anime with ID: ${id} not found in local cache`);
-    }
-    return anime || null;
+    return allAnime.find(anime => anime.id === id) || null;
   }, [allAnime]);
-  
+
   return {
     trendingAnime: trendingAnime || [],
     popularAnime: popularAnime || [],
@@ -110,8 +169,5 @@ export const useAnimeData = () => {
     allAnime,
     isLoading,
     getAnimeById: getAnimeByIdLocal,
-    getSimilarAnime // Keep this function here for backward compatibility
   };
 };
-
-export type { AnimeData };

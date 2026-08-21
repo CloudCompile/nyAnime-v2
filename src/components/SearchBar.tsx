@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { searchAnime } from '../services/animeService';
+import { anilistService } from '../services/anilistService';
 
 const SearchBar = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -11,63 +11,45 @@ const SearchBar = () => {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-  
-  // Handle clicks outside the search component
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
         setIsFocused(false);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-  
-  // Debounce search query
-  useEffect(() => {
-    const timerId = setTimeout(() => {
-      setDebouncedQuery(searchQuery);
-    }, 300);
 
-    return () => {
-      clearTimeout(timerId);
-    };
+  useEffect(() => {
+    const timerId = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(timerId);
   }, [searchQuery]);
-  
-  // Fetch search results using React Query
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['quickSearch', debouncedQuery],
-    queryFn: () => searchAnime(debouncedQuery),
+    queryFn: async () => {
+      const result = await anilistService.getSuggestions(debouncedQuery, 8);
+      return result;
+    },
     enabled: debouncedQuery.length >= 2,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60 * 5,
   });
-  
-  // Log search results for debugging
-  useEffect(() => {
-    if (data) {
-      console.log("Search results:", data);
-    }
-    if (error) {
-      console.error("Search error:", error);
-    }
-  }, [data, error]);
-  
-  const searchResults = data?.anime || [];
-  
+
+  const searchResults = data || [];
+
   const handleClear = () => {
     setSearchQuery('');
     setDebouncedQuery('');
   };
-  
+
   const handleViewAllResults = () => {
     navigate(`/anime?query=${encodeURIComponent(searchQuery)}`);
     setIsFocused(false);
     setSearchQuery('');
   };
-  
+
   const handleResultClick = (animeId: number) => {
     navigate(`/anime/${animeId}`);
     setIsFocused(false);
@@ -91,17 +73,17 @@ const SearchBar = () => {
   };
 
   return (
-    <div 
+    <div
       ref={searchContainerRef}
       className={`relative flex items-center transition-all duration-300 ease-in-out ${
-        isFocused 
-          ? 'w-full md:w-96 bg-secondary/80 border border-white/20' 
+        isFocused
+          ? 'w-full md:w-96 bg-secondary/80 border border-white/20'
           : 'w-10 md:w-64 bg-secondary/50'
       } rounded-full overflow-hidden`}
     >
       <form className="flex items-center px-3 py-2 w-full" onSubmit={handleSubmit}>
-        <Search 
-          className={`text-white/70 h-5 w-5 flex-shrink-0 ${isFocused ? 'mr-2' : 'mr-0'}`} 
+        <Search
+          className={`text-white/70 h-5 w-5 flex-shrink-0 ${isFocused ? 'mr-2' : 'mr-0'}`}
         />
         <input
           type="text"
@@ -114,9 +96,9 @@ const SearchBar = () => {
           } transition-opacity`}
         />
         {searchQuery && isFocused && (
-          <button 
+          <button
             type="button"
-            onClick={handleClear} 
+            onClick={handleClear}
             className="text-white/70 hover:text-white transition-colors"
           >
             <X className="h-4 w-4" />
@@ -128,13 +110,11 @@ const SearchBar = () => {
           <div className="text-sm font-medium text-white/60 mb-2">Quick Results</div>
           <div className="space-y-2">
             {isLoading ? (
-              <div className="text-center py-2 text-white/60 text-sm">
-                Searching...
-              </div>
+              <div className="text-center py-2 text-white/60 text-sm">Searching...</div>
             ) : searchResults.length > 0 ? (
-              searchResults.slice(0, 5).map((anime) => (
-                <div 
-                  key={anime.id} 
+              searchResults.slice(0, 5).map((anime: any) => (
+                <div
+                  key={anime.id}
                   className="flex items-center space-x-3 p-2 hover:bg-white/5 rounded-md transition-colors cursor-pointer"
                   onClick={() => handleResultClick(anime.id)}
                 >
@@ -145,14 +125,14 @@ const SearchBar = () => {
                     <div className="text-sm font-medium">{anime.title}</div>
                     <div className="text-xs text-white/60">
                       {anime.category && (
-                        <span 
+                        <span
                           className="cursor-pointer hover:text-anime-purple"
                           onClick={(e) => handleGenreClick(anime.category, e)}
                         >
                           {anime.category}
                         </span>
-                      )} 
-                      {anime.year && <span> • {anime.year}</span>}
+                      )}{' '}
+                      {anime.year && <span>{anime.year}</span>}
                     </div>
                   </div>
                 </div>
@@ -164,7 +144,7 @@ const SearchBar = () => {
             )}
           </div>
           <div className="mt-3 pt-2 border-t border-white/10 text-center">
-            <button 
+            <button
               className="text-sm text-anime-purple hover:text-anime-purple/80 font-medium transition-colors"
               onClick={handleViewAllResults}
             >

@@ -67,17 +67,17 @@ const NetworkStatus = () => {
           urlString = args[0].toString();
         }
         
-        const isJikanRequest = urlString.includes('api.jikan.moe');
+        const isAnilistRequest = urlString.includes('graphql.anilist.co');
         const isConsometRequest = urlString.includes('consumet.org') || urlString.includes('consumet.api');
         const isAnimeStreaming = urlString.includes('gogoanime') || urlString.includes('zoro.to') || 
                                 urlString.includes('animefox') || urlString.includes('.m3u8') ||
                                 urlString.includes('streaming') || urlString.includes('video');
-        const isVideoApiRequest = isJikanRequest || isConsometRequest || isAnimeStreaming;
+        const isVideoApiRequest = isAnilistRequest || isConsometRequest || isAnimeStreaming;
         
         // Handle rate limiting (HTTP 429 Too Many Requests)
         if (response.status === 429 && isVideoApiRequest) {
           setIsRateLimited(true);
-          if (isJikanRequest) {
+          if (isAnilistRequest) {
             setApiStatus('issue');
           }
           
@@ -101,7 +101,7 @@ const NetworkStatus = () => {
           });
         } else if (!response.ok && isVideoApiRequest) {
           handleFailedRequest();
-          if (isJikanRequest || isConsometRequest) {
+          if (isAnilistRequest || isConsometRequest) {
             setApiStatus('issue');
           }
           
@@ -156,11 +156,11 @@ const NetworkStatus = () => {
   // Check API status periodically
   const checkApiStatus = async () => {
     try {
-      // Try both Jikan and GoGoAnime to verify services
-      const jikanResponse = await fetch('https://api.jikan.moe/v4/anime/1');
+      // Try both AniList and GoGoAnime to verify services
+      const anilistResponse = await fetch('https://graphql.anilist.co', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({query: 'query{Media(id:1){id}}'})});
       
       // Also check if anime data service is available
-      if (!jikanResponse.ok) {
+      if (!anilistResponse.ok) {
         setApiStatus('issue');
       } else {
         // Only set to OK if we were previously having issues
