@@ -314,3 +314,7 @@ export const anilistService = {
     return { page, perPage, totalPages: 1, hasNextPage: false, total: data.media.length, media: data.media.map(mapMedia) };
   },
 };
+
+export const fetchGenres = async (): Promise<string[]> => {
+  return anilistService.getGenres();
+};
