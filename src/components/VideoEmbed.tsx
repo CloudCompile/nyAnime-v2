@@ -215,6 +215,8 @@ const VideoEmbed: React.FC<VideoEmbedProps> = ({
   };
 
   const groupedEmbedSources = groupSourcesByProvider();
+  const currentSource = sources[activeEmbedIndex];
+  const requiresExternalPlayer = currentSource?.provider.startsWith('aniwaves');
 
   if (isLoading || loadingSource) {
     return (
@@ -244,7 +246,18 @@ const VideoEmbed: React.FC<VideoEmbedProps> = ({
   return (
     <div className="w-full aspect-video bg-anime-dark rounded-xl overflow-hidden">
       <div className="relative w-full h-full">
-        {embedUrl ? (
+        {requiresExternalPlayer && embedUrl ? (
+          <div className="w-full h-full flex items-center justify-center p-6 text-center">
+            <Alert className="max-w-md bg-anime-dark border-anime-purple text-white">
+              <ExternalLink className="h-4 w-4 text-anime-purple" />
+              <AlertTitle>Open the provider player</AlertTitle>
+              <AlertDescription>
+                This provider does not allow its player to be embedded on NyAnime.
+                Use the button below to watch this episode in a new tab.
+              </AlertDescription>
+            </Alert>
+          </div>
+        ) : embedUrl ? (
           <iframe
             src={embedUrl + (autoPlay ? '&autoplay=1' : '')}
             className="w-full h-full"
