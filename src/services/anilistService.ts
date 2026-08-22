@@ -117,6 +117,12 @@ interface AnilistPage<T> {
   media: T[];
 }
 
+interface AnilistListResponse {
+  Page: {
+    media: AnilistMedia[];
+  };
+}
+
 export interface AnimeResult {
   id: number;
   malId?: number;
@@ -222,30 +228,30 @@ export function mapMedia(media: AnilistMedia): AnimeResult {
 
 export const anilistService = {
   async search(query: string, page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
-    const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, { search: query, page, perPage, sort: 'SEARCH_MATCH' });
-    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.media.length, media: data.media.map(mapMedia) };
+    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { search: query, page, perPage, sort: 'SEARCH_MATCH' });
+    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
   },
 
   async getTrending(page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
-    const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, { page, perPage, sort: 'TRENDING_DESC' });
-    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.media.length, media: data.media.map(mapMedia) };
+    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { page, perPage, sort: 'TRENDING_DESC' });
+    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
   },
 
   async getPopular(page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
-    const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, { page, perPage, sort: 'POPULARITY_DESC' });
-    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.media.length, media: data.media.map(mapMedia) };
+    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { page, perPage, sort: 'POPULARITY_DESC' });
+    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
   },
 
   async getTopRated(page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
-    const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, { page, perPage, sort: 'SCORE_DESC' });
-    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.media.length, media: data.media.map(mapMedia) };
+    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { page, perPage, sort: 'SCORE_DESC' });
+    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
   },
 
-  async getSeasonal(year: number, season: 'WINTER' | 'SPRING' | 'SUMMER' | 'FALL'): Promise<AnilistPage<AnimeResult>> {
-    const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, {
-      page, perPage, season, seasonYear: String(year), sort: 'TRENDING_DESC',
+  async getSeasonal(year: number, season: 'WINTER' | 'SPRING' | 'SUMMER' | 'FALL', page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
+    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, {
+      page, perPage, season, year, sort: 'TRENDING_DESC',
     });
-    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.media.length, media: data.media.map(mapMedia) };
+    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
   },
 
   async getById(id: number): Promise<AnimeResult | null> {
@@ -259,43 +265,43 @@ export const anilistService = {
   },
 
   async getByGenre(genre: string, page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
-    const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, { genre, page, perPage, sort: 'TRENDING_DESC' });
-    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.media.length, media: data.media.map(mapMedia) };
+    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { genre, page, perPage, sort: 'TRENDING_DESC' });
+    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
   },
 
   async getRandom(): Promise<AnimeResult | null> {
-    const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, { page: Math.floor(Math.random() * 500) + 1, perPage: 1, sort: 'POPULARITY_DESC' });
-    return data.media?.[0] ? mapMedia(data.media[0]) : null;
+    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { page: Math.floor(Math.random() * 500) + 1, perPage: 1, sort: 'POPULARITY_DESC' });
+    return data.Page.media?.[0] ? mapMedia(data.Page.media[0]) : null;
   },
 
   async getSuggestions(query: string, limit = 8): Promise<AnimeResult[]> {
-    const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, { search: query, page: 1, perPage: limit, sort: 'SEARCH_MATCH' });
-    return (data.media || []).map(mapMedia);
+    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { search: query, page: 1, perPage: limit, sort: 'SEARCH_MATCH' });
+    return (data.Page.media || []).map(mapMedia);
   },
 
   async getSchedule(page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
-    const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, { page, perPage, sort: 'AIRING_TIME_DESC', status: 'RELEASING' });
-    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.media.length, media: data.media.map(mapMedia) };
+    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { page, perPage, sort: 'AIRING_TIME_DESC', status: 'RELEASING' });
+    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
   },
 
   async getSpotlight(page = 1): Promise<AnimeResult | null> {
-    const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, { page, perPage: 1, sort: 'POPULARITY_DESC' });
-    return data.media?.[0] ? mapMedia(data.media[0]) : null;
+    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { page, perPage: 1, sort: 'POPULARITY_DESC' });
+    return data.Page.media?.[0] ? mapMedia(data.Page.media[0]) : null;
   },
 
   async getByYear(year: number, page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
-    const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, { page, perPage, year: `${year}`, sort: 'TRENDING_DESC' });
-    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.media.length, media: data.media.map(mapMedia) };
+    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { page, perPage, year, sort: 'TRENDING_DESC' });
+    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
   },
 
   async getByFormat(format: string, page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
-    const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, { format, page, perPage, sort: 'TRENDING_DESC' });
-    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.media.length, media: data.media.map(mapMedia) };
+    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { format, page, perPage, sort: 'TRENDING_DESC' });
+    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
   },
 
   async getByStatus(status: string, page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
-    const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, { status, page, perPage, sort: 'TRENDING_DESC' });
-    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.media.length, media: data.media.map(mapMedia) };
+    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { status, page, perPage, sort: 'TRENDING_DESC' });
+    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
   },
 
   async searchMulti(params: {
@@ -306,12 +312,12 @@ export const anilistService = {
     const variables: any = { page, perPage, sort };
     if (query) variables.search = query;
     if (genre) variables.genre = genre;
-    if (year) variables.year = String(year);
+    if (year) variables.year = year;
     if (season) variables.season = season;
     if (format) variables.format = format;
     if (status) variables.status = status;
-    const data = await anilistFetch<{ media: AnilistMedia[] }>(LIST_QUERY, variables);
-    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.media.length, media: data.media.map(mapMedia) };
+    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, variables);
+    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
   },
 };
 
