@@ -54,6 +54,33 @@ export const fetchEpisodes = async (anilistId: string): Promise<EpisodeInfo[]> =
   console.log(`Fetching episodes for anime ID: ${anilistId}`);
 
   try {
+    const response = await fetch(`/api/episodes?animeId=${encodeURIComponent(anilistId)}`);
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data.episodes) && data.episodes.length > 0) {
+        return data.episodes.map((ep: AniwavesEpisode) => ({
+          id: ep.id,
+          number: ep.number,
+          title: ep.title,
+          image: ep.image,
+          description: '',
+          duration: '',
+        }));
+      }
+    }
+  } catch (error) {
+    console.warn('Server episode endpoint failed:', error);
+  }
+
+  // Keep provider requests server-side; use metadata count when the provider is unavailable.
+  try {
+    const animeData = await anilistService.getById(parseInt(anilistId));
+    return generateDummyEpisodes(anilistId, animeData?.episodes || 12);
+  } catch {
+    return generateDummyEpisodes(anilistId, 12);
+  }
+
+  try {
     // Get anime info from AniList
     const animeData = await anilistService.getById(parseInt(anilistId));
     if (!animeData) {
@@ -91,6 +118,27 @@ export const fetchEpisodes = async (anilistId: string): Promise<EpisodeInfo[]> =
 
 export const fetchVideoSources = async (episodeId: string): Promise<VideoSource[]> => {
   console.log(`Fetching video sources for episode ID: ${episodeId}`);
+
+  try {
+    const response = await fetch(`/api/sources?episodeId=${encodeURIComponent(episodeId)}`);
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data.sources) && data.sources.length > 0) {
+        return data.sources.map((source: AniwavesVideoSource, index: number) => ({
+          id: `aniwaves-${index}`,
+          provider: `aniwaves-${source.type || 'sub'}`,
+          embedUrl: source.url,
+          directUrl: source.url,
+          quality: source.quality || 'auto',
+          isWorking: true,
+        }));
+      }
+    }
+  } catch (error) {
+    console.warn('Server source endpoint failed:', error);
+  }
+
+  return [];
 
   const match = episodeId.match(/^(\d+)-episode-(\d+)$/);
   if (!match) {
