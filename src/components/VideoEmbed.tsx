@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, Loader2, ServerIcon } from 'lucide-react';
+import { AlertCircle, ExternalLink, Loader2, ServerIcon } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { 
@@ -270,6 +270,18 @@ const VideoEmbed: React.FC<VideoEmbedProps> = ({
               </AlertDescription>
             </Alert>
           </div>
+        )}
+
+        {embedUrl && (
+          <a
+            href={embedUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="absolute bottom-3 left-3 inline-flex items-center gap-2 rounded-md bg-black/80 px-3 py-2 text-xs text-white hover:bg-anime-purple"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Open provider player
+          </a>
         )}
         
         {/* Provider selection dropdown */}
