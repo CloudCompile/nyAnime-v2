@@ -1,4 +1,4 @@
-import { aniwavesService } from '../src/services/aniwavesService';
+import { aniwavesService } from '../src/services/aniwavesService.ts';
 
 export default async function handler(req: any, res: any) {
   const episodeId = String(req.query?.episodeId || '');
