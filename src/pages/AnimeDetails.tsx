@@ -50,7 +50,7 @@ const AnimeDetails = () => {
       const getEpisodes = async () => {
         setIsLoadingEpisodes(true);
         try {
-          const apiEpisodes = await fetchEpisodes(id || '0');
+          const apiEpisodes = await fetchEpisodes(id || '0', anime.title);
           setEpisodes(apiEpisodes);
         } catch (error) {
           console.error('Error fetching episodes:', error);

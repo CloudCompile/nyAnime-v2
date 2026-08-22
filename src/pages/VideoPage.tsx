@@ -93,7 +93,7 @@ const VideoPage = () => {
             return;
           }
           
-          const apiEpisodes = await fetchEpisodes(animeId);
+          const apiEpisodes = await fetchEpisodes(animeId, anime.title);
           console.log(`Fetched ${apiEpisodes.length} episodes for anime ${animeId}`);
           
           const airedEpisodeCount = anime.airing ? (anime.airingEpisodes || 1) : (anime.episodes || apiEpisodes.length);
@@ -194,7 +194,7 @@ const VideoPage = () => {
       });
       
       console.log(`Loading sources for episode ID: ${episode.id}, number: ${episode.number}`);
-      const sources = await fetchVideoSources(episode.id);
+      const sources = await fetchVideoSources(episode.id, anime?.title || '');
       
       console.log(`Loaded ${sources.length} sources for episode ${episode.number}:`, sources);
       

@@ -50,11 +50,11 @@ const createEmbedUrl = (sourceUrl: string, isM3U8: boolean): string => {
   return `https://player.lovable.app/?url=${encodeURIComponent(sourceUrl)}`;
 };
 
-export const fetchEpisodes = async (anilistId: string): Promise<EpisodeInfo[]> => {
+export const fetchEpisodes = async (anilistId: string, title = ''): Promise<EpisodeInfo[]> => {
   console.log(`Fetching episodes for anime ID: ${anilistId}`);
 
   try {
-    const response = await fetch(`/api/episodes?animeId=${encodeURIComponent(anilistId)}`);
+    const response = await fetch(`/api/episodes?animeId=${encodeURIComponent(anilistId)}&title=${encodeURIComponent(title)}`);
     if (response.ok) {
       const data = await response.json();
       if (Array.isArray(data.episodes) && data.episodes.length > 0) {
@@ -116,11 +116,11 @@ export const fetchEpisodes = async (anilistId: string): Promise<EpisodeInfo[]> =
   }
 };
 
-export const fetchVideoSources = async (episodeId: string): Promise<VideoSource[]> => {
+export const fetchVideoSources = async (episodeId: string, title = ''): Promise<VideoSource[]> => {
   console.log(`Fetching video sources for episode ID: ${episodeId}`);
 
   try {
-    const response = await fetch(`/api/sources?episodeId=${encodeURIComponent(episodeId)}`);
+    const response = await fetch(`/api/sources?episodeId=${encodeURIComponent(episodeId)}&title=${encodeURIComponent(title)}`);
     if (response.ok) {
       const data = await response.json();
       if (Array.isArray(data.sources) && data.sources.length > 0) {

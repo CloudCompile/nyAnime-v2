@@ -2,13 +2,19 @@ import { aniwavesService } from '../src/services/aniwavesService.js';
 
 export default async function handler(req: any, res: any) {
   const episodeId = String(req.query?.episodeId || '');
+  const title = String(req.query?.title || '');
   const match = episodeId.match(/^(\d+)-episode-(\d+)$/);
   if (!match) {
     return res.status(400).json({ error: 'Invalid episodeId' });
   }
 
   try {
-    const sources = await aniwavesService.getEpisodeSources(match[1], Number(match[2]));
+    let providerId = match[1];
+    if (title) {
+      const matches = await aniwavesService.search(title);
+      providerId = matches[0]?.id || providerId;
+    }
+    const sources = await aniwavesService.getEpisodeSources(providerId, Number(match[2]));
     res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300');
     return res.status(200).json({ sources });
   } catch (error) {
