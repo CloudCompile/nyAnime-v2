@@ -148,6 +148,21 @@ export const aniwavesService = {
     return episodes;
   },
 
+  async getEpisodesBySlug(slug: string, animeId: string): Promise<AniwavesEpisode[]> {
+    const watchHtml = await fetchPage(`${ANIWAVES_BASE}/watch-anime/${slug}-${animeId}/ep-1`);
+    const jsonLd = parseJsonLd(watchHtml);
+    const series = jsonLd.find((d: any) => d['@type'] === 'TVSeries');
+    const epCount = series?.numberOfEpisodes || 12;
+    return Array.from({ length: epCount }, (_, index) => ({
+      id: `${animeId}-episode-${index + 1}`,
+      number: index + 1,
+      url: `${ANIWAVES_BASE}/watch-anime/${slug}-${animeId}/ep-${index + 1}`,
+      slug,
+      animeId,
+      animeSlug: slug,
+    }));
+  },
+
   async getEpisodeSources(animeId: string, episodeNumber: number): Promise<AniwavesVideoSource[]> {
     const info = await this.getAnimeById(animeId);
     if (!info) return [];
@@ -181,6 +196,21 @@ export const aniwavesService = {
       sources.push({ url: episode.embedUrl, quality: 'Sub', type: 'sub', server: 'aniwaves' });
     }
 
+    return sources;
+  },
+
+  async getEpisodeSourcesBySlug(slug: string, animeId: string, episodeNumber: number): Promise<AniwavesVideoSource[]> {
+    const html = await fetchPage(`${ANIWAVES_BASE}/watch-anime/${slug}-${animeId}/ep-${episodeNumber}`);
+    const jsonLd = parseJsonLd(html);
+    const episode = jsonLd.find((d: any) => d['@type'] === 'TVEpisode' && d.episodeNumber === episodeNumber);
+    if (!episode) return [];
+    const sources: AniwavesVideoSource[] = [];
+    for (const enc of episode.encoding || []) {
+      if (enc.embedUrl) sources.push({ url: enc.embedUrl, quality: enc.inLanguage === 'en' ? 'Dub' : 'Sub', type: enc.inLanguage === 'en' ? 'dub' : 'sub', server: 'aniwaves' });
+    }
+    if (sources.length === 0 && (episode.url || episode.embedUrl)) {
+      sources.push({ url: episode.url || episode.embedUrl, quality: 'Sub', type: 'sub', server: 'aniwaves' });
+    }
     return sources;
   },
 

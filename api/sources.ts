@@ -14,7 +14,10 @@ export default async function handler(req: any, res: any) {
       const matches = await aniwavesService.search(title);
       providerId = matches[0]?.id || providerId;
     }
-    const sources = await aniwavesService.getEpisodeSources(providerId, Number(match[2]));
+    const providerMatch = title ? (await aniwavesService.search(title))[0] : null;
+    const sources = providerMatch
+      ? await aniwavesService.getEpisodeSourcesBySlug(providerMatch.slug, providerMatch.id, Number(match[2]))
+      : await aniwavesService.getEpisodeSources(providerId, Number(match[2]));
     res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300');
     return res.status(200).json({ sources });
   } catch (error) {
