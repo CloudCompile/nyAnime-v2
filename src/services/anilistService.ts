@@ -1,5 +1,6 @@
 
 const ANILIST_URL = 'https://graphql.anilist.co';
+const JIKAN_URL = 'https://api.jikan.moe/v4';
 
 const LIST_QUERY = `
   query($search: String, $page: Int = 1, $perPage: Int = 20, $genre: String, $year: Int, $season: MediaSeason, $format: MediaFormat, $status: MediaStatus, $sort: [MediaSort] = TRENDING_DESC) {
@@ -123,6 +124,24 @@ interface AnilistListResponse {
   };
 }
 
+interface JikanAnime {
+  mal_id: number;
+  title: string;
+  title_english?: string | null;
+  title_japanese?: string | null;
+  images?: { jpg?: { large_image_url?: string; image_url?: string } };
+  type?: string;
+  episodes?: number | null;
+  duration?: string | null;
+  status?: string | null;
+  year?: number | null;
+  score?: number | null;
+  popularity?: number | null;
+  synopsis?: string | null;
+  genres?: { name: string }[];
+  studios?: { name: string }[];
+}
+
 export interface AnimeResult {
   id: number;
   malId?: number;
@@ -164,6 +183,53 @@ async function anilistFetch<T>(query: string, variables: Record<string, any> = {
   const data = await response.json();
   if (data.errors?.[0]) throw new Error(data.errors[0].message);
   return data.data as T;
+}
+
+async function jikanFetch<T>(path: string): Promise<T> {
+  const response = await fetch(`${JIKAN_URL}${path}`);
+  if (!response.ok) throw new Error(`Jikan API error: ${response.status}`);
+  const result = await response.json();
+  return result.data as T;
+}
+
+function mapJikanMedia(media: JikanAnime): AnimeResult {
+  return {
+    id: media.mal_id,
+    malId: media.mal_id,
+    title: media.title_english || media.title,
+    titleRomaji: media.title,
+    titleEnglish: media.title_english || undefined,
+    titleNative: media.title_japanese || undefined,
+    image: media.images?.jpg?.large_image_url || media.images?.jpg?.image_url || '',
+    format: media.type,
+    episodes: media.episodes,
+    duration: media.duration ? parseInt(media.duration, 10) || undefined : undefined,
+    status: media.status || undefined,
+    seasonYear: media.year || undefined,
+    score: media.score || undefined,
+    popularity: media.popularity || undefined,
+    genres: media.genres?.map((genre) => genre.name),
+    studios: media.studios?.map((studio) => studio.name),
+    description: media.synopsis || undefined,
+  };
+}
+
+async function fallbackList(path: string, page: number, perPage: number): Promise<AnilistPage<AnimeResult>> {
+  const media = await jikanFetch<JikanAnime[]>(path);
+  const items = media.slice(0, perPage).map(mapJikanMedia);
+  return { page, perPage, totalPages: 1, hasNextPage: false, total: items.length, media: items };
+}
+
+async function listWithFallback(
+  request: () => Promise<AnilistPage<AnimeResult>>,
+  fallback: () => Promise<AnilistPage<AnimeResult>>,
+): Promise<AnilistPage<AnimeResult>> {
+  try {
+    return await request();
+  } catch (error) {
+    console.warn('AniList unavailable, using Jikan fallback:', error);
+    return fallback();
+  }
 }
 
 export function mapMedia(media: AnilistMedia): AnimeResult {
@@ -228,18 +294,33 @@ export function mapMedia(media: AnilistMedia): AnimeResult {
 
 export const anilistService = {
   async search(query: string, page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
-    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { search: query, page, perPage, sort: 'SEARCH_MATCH' });
-    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
+    return listWithFallback(
+      async () => {
+        const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { search: query, page, perPage, sort: 'SEARCH_MATCH' });
+        return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
+      },
+      () => fallbackList(`/anime?q=${encodeURIComponent(query)}&page=${page}&limit=${perPage}`, page, perPage),
+    );
   },
 
   async getTrending(page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
-    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { page, perPage, sort: 'TRENDING_DESC' });
-    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
+    return listWithFallback(
+      async () => {
+        const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { page, perPage, sort: 'TRENDING_DESC' });
+        return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
+      },
+      () => fallbackList(`/top/anime?page=${page}&limit=${perPage}`, page, perPage),
+    );
   },
 
   async getPopular(page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
-    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { page, perPage, sort: 'POPULARITY_DESC' });
-    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
+    return listWithFallback(
+      async () => {
+        const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { page, perPage, sort: 'POPULARITY_DESC' });
+        return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
+      },
+      () => fallbackList(`/top/anime?page=${page}&limit=${perPage}&filter=bypopularity`, page, perPage),
+    );
   },
 
   async getTopRated(page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
@@ -248,10 +329,13 @@ export const anilistService = {
   },
 
   async getSeasonal(year: number, season: 'WINTER' | 'SPRING' | 'SUMMER' | 'FALL', page = 1, perPage = 20): Promise<AnilistPage<AnimeResult>> {
-    const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, {
-      page, perPage, season, year, sort: 'TRENDING_DESC',
-    });
-    return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
+    return listWithFallback(
+      async () => {
+        const data = await anilistFetch<AnilistListResponse>(LIST_QUERY, { page, perPage, season, year, sort: 'TRENDING_DESC' });
+        return { page, perPage, totalPages: 1, hasNextPage: false, total: data.Page.media.length, media: data.Page.media.map(mapMedia) };
+      },
+      () => fallbackList(`/seasons/${year}/${season.toLowerCase()}?page=${page}&limit=${perPage}`, page, perPage),
+    );
   },
 
   async getById(id: number): Promise<AnimeResult | null> {
