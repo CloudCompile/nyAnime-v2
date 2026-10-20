@@ -22,6 +22,15 @@ Segments are MPEG-TS in both cases. The CDN rotates through numbered subdomains
 (`ru-cdn1`, `ru-ri-cdn3`, ...), so allow-lists match on domain suffix, never on
 an exact hostname.
 
+Catalogue entries carry two ids and the API accepts them inconsistently:
+`id` is the slug (`frieren-beyond-journeys-end-74575`) and `data_id` is the
+numeric upstream id (`74575`). `/api/info` **only** resolves slugs, while
+`/api/episodes/:id`, `/api/servers/:id` and `/api/stream` accept either. A
+numeric id passed to `/api/info` returns `200` with `data: null` — not an
+error — so the failure is silent. The web app routes by numeric id and
+translates through `resolveSlug` before calling `/api/info`; the macOS app
+routes by slug directly.
+
 ## Web app
 
 ```sh
@@ -31,7 +40,13 @@ npm run build            # production bundle
 npx tsc --noEmit         # type-check
 npm run lint             # eslint; must stay at zero errors
 npm run verify:download  # end-to-end download + transmux check against the real API
+npm run verify:playback  # headless Chromium: real HLS playback through the proxy
+npm run verify:web-download  # headless Chromium: click through to a file on disk
 ```
+
+The two browser harnesses need a running dev server and a Chromium binary
+(`CHROME_PATH`, default `/usr/bin/chromium`); pass `NYANIME_URL` to point them
+elsewhere.
 
 Key modules:
 

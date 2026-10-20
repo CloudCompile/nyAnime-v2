@@ -136,6 +136,10 @@ export const useAnimeSearch = (
  * Resolve a route id to the catalogue slug. A slug is used as-is; a numeric id
  * is looked up in the local cache first, and only falls back to a request when
  * the slug has never been seen.
+ *
+ * `/api/info` and the upstream watch pages are keyed by slug, so a bare numeric
+ * id (what watch history and bookmarks store) has to be translated before any
+ * metadata can be fetched.
  */
 export async function resolveSlug(routeId: string): Promise<string | null> {
   if (!routeId) return null;
@@ -143,8 +147,26 @@ export async function resolveSlug(routeId: string): Promise<string | null> {
   const cached = cachedSlug(routeId);
   if (cached) return cached;
 
-  const byKeyword = await searchAnime(routeId).catch(() => []);
-  const match = byKeyword.find((item) => item.dataId === routeId) ?? byKeyword[0];
+  // Keyword search does not index numeric ids, so a cold lookup falls back to
+  // scanning the catalogue feeds, which carry both ids for every entry.
+  const candidates = await Promise.all([
+    searchAnime(routeId).catch(() => []),
+    getHome().catch(() => null),
+  ]);
+  const pools: AnimeSummary[] = [...candidates[0]];
+  if (candidates[1]) {
+    const home = candidates[1];
+    pools.push(
+      ...home.spotlights,
+      ...home.trending,
+      ...home.topAiring,
+      ...home.mostPopular,
+      ...home.mostFavorite,
+      ...home.latestCompleted,
+      ...home.latestEpisode,
+    );
+  }
+  const match = pools.find((item) => item.dataId === routeId);
   if (match) {
     rememberSlug(match.dataId, match.id);
     return match.id;

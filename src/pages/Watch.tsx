@@ -27,6 +27,7 @@ import {
   type StreamResult,
 } from '../services/animeApiService';
 import { useDownloads } from '../hooks/useDownloads';
+import { resolveSlug } from '../hooks/useAnimeData';
 import { rememberSlug } from '../lib/animeIds';
 import { getCurrentUserData, updateWatchHistory } from '../services/authService';
 
@@ -63,11 +64,15 @@ const Watch = () => {
 
     (async () => {
       try {
-        const [info, episodeList] = await Promise.all([getAnimeInfo(id), getEpisodes(id)]);
+        // `/api/info` only resolves catalogue slugs, while the route id is the
+        // numeric id used by history and the watchlist. Episodes and streams
+        // accept either, so only the metadata lookup needs the resolved slug.
+        const slug = (await resolveSlug(id)) ?? id;
+        const [info, episodeList] = await Promise.all([getAnimeInfo(slug), getEpisodes(id)]);
         if (cancelled) return;
         setAnime(info);
         setEpisodes(episodeList);
-        rememberSlug(info?.dataId, info?.id || id);
+        rememberSlug(info?.dataId, info?.id || slug);
         if (info) document.title = `${info.title} — NyAnime`;
         if (episodeList.length > 0) {
           setDownloadRange({ from: 1, to: episodeList.length });

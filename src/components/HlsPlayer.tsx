@@ -253,7 +253,6 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
         onWaiting={() => setIsLoading(true)}
         onPlaying={() => setIsLoading(false)}
         onEnded={onEnded}
-        crossOrigin="anonymous"
       />
 
       {isLoading && (

@@ -9,7 +9,9 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "verify:download": "esbuild tools/verify-download.mts --bundle --platform=node --format=esm --target=node20 --external:mux.js --outfile=.tmp-verify.mjs --log-level=warning && node .tmp-verify.mjs"
+    "verify:download": "esbuild tools/verify-download.mts --bundle --platform=node --format=esm --target=node20 --external:mux.js --outfile=.tmp-verify.mjs --log-level=warning && node .tmp-verify.mjs",
+    "verify:playback": "node tools/verify-playback.mjs",
+    "verify:web-download": "node tools/verify-web-download.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -82,6 +84,7 @@
     "globals": "^15.9.0",
     "lovable-tagger": "^1.1.7",
     "postcss": "^8.5.3",
+    "puppeteer-core": "25.15.0",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
