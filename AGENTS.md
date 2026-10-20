@@ -102,6 +102,7 @@ Removing that step needs a Developer ID signature and notarization.
 
 ## CI
 
-`.github/workflows/ci.yml` has three jobs: web (type-check, lint, build), core
-(Swift on Linux), and mac (build, test, bundle a universal app, upload the
-artifact).
+`.github/workflows/ci.yml` has four jobs: web (type-check, lint, build),
+web-browser (headless Chrome playback and download against the real CDN),
+core (Swift on Linux, including the live API and CDN suite), and mac (build,
+test, bundle a universal app, upload the artifact).

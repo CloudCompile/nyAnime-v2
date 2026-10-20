@@ -20,9 +20,9 @@ jobs:
     name: Web app
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
@@ -35,11 +35,38 @@ jobs:
       - name: Build
         run: npm run build
 
+  web-browser:
+    name: Web playback and download
+    runs-on: ubuntu-latest
+    # Drives the real dev server, proxy and CDN in headless Chrome. Kept
+    # separate from `web` so a CDN outage cannot mask a type or lint failure.
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - name: Start dev server
+        run: |
+          npm run dev > /tmp/dev.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8080/ >/dev/null && exit 0
+            sleep 1
+          done
+          echo "dev server did not start"; cat /tmp/dev.log; exit 1
+      - name: Verify playback
+        run: npm run verify:playback
+      - name: Verify download
+        run: npm run verify:web-download
+
   core:
     name: Swift core (Linux)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Swift
         run: |
@@ -57,6 +84,15 @@ jobs:
           export PATH=/opt/swift/usr/bin:$PATH
           swift build
           swift test
+      - name: Live tests against the real API and CDN
+        # Opt-in suite: exercises the real catalogue, playlists and a real
+        # segment download. Run on Linux so it is cheap.
+        working-directory: macapp
+        env:
+          NYANIME_LIVE_TESTS: "1"
+        run: |
+          export PATH=/opt/swift/usr/bin:$PATH
+          swift test --filter LiveTests
 
   mac:
     name: macOS app
@@ -64,7 +100,7 @@ jobs:
     # architectures: x86_64 is what a 2017 Intel MacBook Pro actually executes.
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build and test
         working-directory: macapp
@@ -90,7 +126,7 @@ jobs:
           lipo -archs "$APP/Contents/MacOS/NyAnime" | grep -q x86_64
           codesign --verify --verbose=2 "$APP" || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: NyAnime.app
           path: macapp/build/NyAnime.app

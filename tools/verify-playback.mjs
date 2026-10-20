@@ -1,9 +1,10 @@
 import puppeteer from 'puppeteer-core';
+import { resolveChromePath } from './chrome.mjs';
 
 const URL = process.argv[2] ?? (process.env.NYANIME_URL ?? 'http://localhost:8080/anime/82753/watch');
 
 const browser = await puppeteer.launch({
-  executablePath: process.env.CHROME_PATH ?? '/usr/bin/chromium',
+  executablePath: resolveChromePath(),
   headless: true,
   args: [
     '--no-sandbox',

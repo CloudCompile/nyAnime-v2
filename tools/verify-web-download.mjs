@@ -1,4 +1,5 @@
 import puppeteer from 'puppeteer-core';
+import { resolveChromePath } from './chrome.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -8,7 +9,7 @@ fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
 
 const browser = await puppeteer.launch({
-  executablePath: process.env.CHROME_PATH ?? '/usr/bin/chromium',
+  executablePath: resolveChromePath(),
   headless: true,
   args: ['--no-sandbox', '--disable-dev-shm-usage'],
 });
