@@ -8,8 +8,9 @@
  * makes the result playable by rewriting every URI in the manifest back to the
  * proxy.
  *
- * It is shared by the Vercel function (`api/stream.ts`) and the Cloudflare
- * Worker (`worker/index.ts`) so both stay byte-for-byte consistent.
+ * It backs the Vercel function (`api/stream.ts`). The same module can run on a
+ * Cloudflare Worker unchanged, which is why the fetch logic is kept free of
+ * Node-only APIs.
  */
 
 /**
