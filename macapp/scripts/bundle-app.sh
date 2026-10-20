@@ -21,11 +21,37 @@ MIN_MACOS="13.0"
 cd "$ROOT"
 
 # Ask SwiftPM where the built products actually landed rather than guessing.
-BIN_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
-BINARY="$BIN_DIR/$APP_NAME"
-if [[ ! -x "$BINARY" ]]; then
-  echo "error: expected executable at $BINARY" >&2
-  echo "       build it first: swift build -c $CONFIGURATION" >&2
+# A universal build (`--arch x86_64 --arch arm64`) does not land where
+# `--show-bin-path` reports, so fall back to the directories SwiftPM uses for
+# multi-architecture products.
+find_binary() {
+  local bin_dir
+  bin_dir="$(swift build -c "$CONFIGURATION" --show-bin-path)"
+  if [[ -x "$bin_dir/$APP_NAME" ]]; then
+    echo "$bin_dir/$APP_NAME"
+    return 0
+  fi
+  local candidate
+  for candidate in \
+    "$ROOT/.build/apple/Products/Release" \
+    "$ROOT/.build/apple/Products/Debug" \
+    "$ROOT/.build/$CONFIGURATION"; do
+    if [[ -x "$candidate/$APP_NAME" ]]; then
+      echo "$candidate/$APP_NAME"
+      return 0
+    fi
+  done
+  return 1
+}
+
+BINARY="$(find_binary || true)"
+if [[ -z "$BINARY" ]]; then
+  echo "Building $APP_NAME ($CONFIGURATION)..." >&2
+  swift build -c "$CONFIGURATION"
+  BINARY="$(find_binary || true)"
+fi
+if [[ -z "$BINARY" ]]; then
+  echo "error: could not find the $APP_NAME executable after building" >&2
   exit 1
 fi
 
