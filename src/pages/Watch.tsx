@@ -115,7 +115,6 @@ const Watch = () => {
         if (cancelled) return;
         setStream(result);
         if (result.servers.length > 0) setServers(result.servers);
-        if (result.server && !serverName) setServerName(result.server);
       } catch (err) {
         if (cancelled || controller.signal.aborted) return;
         setError(
@@ -185,6 +184,9 @@ const Watch = () => {
 
   const serverOptions = servers.filter((server) => server.type === trackType);
   const hasDub = servers.some((server) => server.type === 'dub');
+  // The server actually in use: an explicit pick, or whichever one the API
+  // resolved after falling back past the embed-only default.
+  const activeServer = serverName || stream?.server || '';
   const canPrev = currentEpisode && episodes.some((episode) => episode.number === episodeNumber - 1);
   const canNext = currentEpisode && episodes.some((episode) => episode.number === episodeNumber + 1);
   const embedOnly = Boolean(stream && !stream.file && stream.iframe);
@@ -365,13 +367,13 @@ const Watch = () => {
                     key={`${server.type}-${server.serverName}`}
                     onClick={() => setServerName(server.serverName)}
                     className={`flex w-full items-center justify-between rounded px-3 py-2 text-sm transition-colors ${
-                      serverName === server.serverName
+                      activeServer === server.serverName
                         ? 'bg-anime-purple/20 text-anime-purple'
                         : 'bg-white/5 text-white/80 hover:bg-white/15'
                     }`}
                   >
                     <span>{server.serverName}</span>
-                    {serverName === server.serverName && <Check className="h-4 w-4" />}
+                    {activeServer === server.serverName && <Check className="h-4 w-4" />}
                   </button>
                 ))}
               </div>

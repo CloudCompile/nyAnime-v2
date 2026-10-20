@@ -127,6 +127,41 @@ final class LiveTests: XCTestCase {
         XCTAssertTrue(playlist.segments.allSatisfy { $0.scheme == "https" })
     }
 
+    /// Regression: with no server named the API returned its first server, which
+    /// was usually an embed-only one, so the default watch action produced
+    /// nothing playable. Resolving without a server must now reach a manifest.
+    func testDefaultStreamResolvesToPlayableManifest() async throws {
+        try requireLive()
+
+        // Series whose upstream list leads with an embed-only server.
+        let episodes = try await api.episodes(id: "cyberpunk-edgerunners-2-82821")
+        let episode = try XCTUnwrap(episodes.first)
+
+        let source = try await api.stream(episodeKey: episode.key, type: .sub)
+        let resolved = try XCTUnwrap(source, "no stream source")
+        XCTAssertTrue(
+            resolved.isDirect,
+            "default resolution returned \(resolved.server) with no manifest"
+        )
+        XCTAssertNotNil(resolved.fileURL)
+    }
+
+    /// The upstream list marks every server `sub` even when it serves a dub, so
+    /// the default path must not filter candidates by track kind.
+    func testDefaultDubStreamResolvesToPlayableManifest() async throws {
+        try requireLive()
+
+        let episodes = try await api.episodes(id: "ao-no-hako-season-2-82776")
+        let episode = try XCTUnwrap(episodes.first)
+
+        let source = try await api.stream(episodeKey: episode.key, type: .dub)
+        let resolved = try XCTUnwrap(source, "no stream source")
+        XCTAssertTrue(
+            resolved.isDirect,
+            "default dub resolution returned \(resolved.server) with no manifest"
+        )
+    }
+
     func testDownloadRealSegmentsToDisk() async throws {
         try requireLive()
         let fetcher = self.fetcher

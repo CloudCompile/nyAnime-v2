@@ -392,37 +392,87 @@ export async function getServers(episodeKey: string, signal?: AbortSignal): Prom
 }
 
 /**
- * Resolve a playable stream for an episode. `server` and `type` are optional;
- * the API falls back to its first available server.
+ * Resolve a playable stream for an episode.
+ *
+ * When the caller does not name a server, the API picks the *first* server in
+ * the upstream list — which is usually `DatSaV`. Measured against the live API,
+ * `DatSaV` returned a direct HLS manifest for a small minority of episodes and
+ * otherwise handed back an embed page, while `Vidplay` returned a direct
+ * manifest for every episode sampled. So the API's default frequently resolves
+ * to something that can neither be played nor downloaded.
+ *
+ * Rather than hard-code a server, ask for the default first and, if it comes
+ * back embed-only, walk the alternatives in preference order. An explicit
+ * choice is always honoured as-is, and the original result is returned when
+ * nothing better exists, so this only costs an extra request in the case that
+ * is currently broken.
  */
 export async function getStream(
   episodeKey: string,
   options: { server?: string; type?: 'sub' | 'dub'; fallback?: boolean } = {},
   signal?: AbortSignal,
 ): Promise<StreamResult> {
-  const query = new URLSearchParams({ id: episodeKey });
-  if (options.server) query.set('server', options.server);
-  if (options.type) query.set('type', options.type);
-  const path = options.fallback ? '/api/stream/fallback' : '/api/stream';
-  const payload = (results(await getJson(`${path}?${query.toString()}`, signal)) ?? {}) as {
-    streamingLink?: unknown;
-    servers?: unknown;
+  const request = async (server?: string): Promise<StreamResult> => {
+    const query = new URLSearchParams({ id: episodeKey });
+    if (server) query.set('server', server);
+    if (options.type) query.set('type', options.type);
+    const path = options.fallback ? '/api/stream/fallback' : '/api/stream';
+    const payload = (results(await getJson(`${path}?${query.toString()}`, signal)) ?? {}) as {
+      streamingLink?: unknown;
+      servers?: unknown;
+    };
+    const link = (Array.isArray(payload.streamingLink) ? payload.streamingLink[0] : payload.streamingLink) as
+      | Record<string, unknown>
+      | undefined;
+    const file = (link?.link ?? {}) as Record<string, unknown>;
+    const tracks = Array.isArray(link?.tracks) ? (link?.tracks as SubtitleTrack[]) : [];
+    return {
+      file: pick(file, 'file') || null,
+      iframe: pick(link ?? {}, 'iframe') || null,
+      server: pick(link ?? {}, 'server'),
+      type: pick(link ?? {}, 'type'),
+      tracks,
+      intro: Array.isArray(link?.intro) ? (link?.intro as number[]) : [],
+      outro: Array.isArray(link?.outro) ? (link?.outro as number[]) : [],
+      servers: mapServers(payload.servers),
+    };
   };
-  const link = (Array.isArray(payload.streamingLink) ? payload.streamingLink[0] : payload.streamingLink) as
-    | Record<string, unknown>
-    | undefined;
-  const file = (link?.link ?? {}) as Record<string, unknown>;
-  const tracks = Array.isArray(link?.tracks) ? (link?.tracks as SubtitleTrack[]) : [];
-  return {
-    file: pick(file, 'file') || null,
-    iframe: pick(link ?? {}, 'iframe') || null,
-    server: pick(link ?? {}, 'server'),
-    type: pick(link ?? {}, 'type'),
-    tracks,
-    intro: Array.isArray(link?.intro) ? (link?.intro as number[]) : [],
-    outro: Array.isArray(link?.outro) ? (link?.outro as number[]) : [],
-    servers: mapServers(payload.servers),
+
+  if (options.server) return request(options.server);
+
+  const first = await request();
+  if (first.file) return first;
+
+  for (const candidate of rankServers(first.servers, first.server)) {
+    const next = await request(candidate.serverName);
+    if (next.file) return next;
+  }
+
+  // Every server was embed-only, so surface the original result.
+  return first;
+}
+
+/**
+ * Servers that hand back a direct manifest, best first. Anything unlisted sorts
+ * last so a new upstream server is still tried, just after the known ones.
+ */
+const SERVER_PREFERENCE = ['Vidplay', 'MyCloud', 'DatSaV', 'BYFMS', 'DGHG'];
+
+/**
+ * All servers ordered by preference, excluding `exclude`.
+ *
+ * Deliberately not filtered by track type: the upstream list labels every entry
+ * `sub` (and newer ones `ssub`) regardless of what the episode actually offers,
+ * so filtering on it would discard the working candidates for a dub.
+ */
+function rankServers(servers: ServerOption[], exclude?: string): ServerOption[] {
+  const rank = (server: ServerOption) => {
+    const index = SERVER_PREFERENCE.indexOf(server.serverName);
+    return index === -1 ? SERVER_PREFERENCE.length : index;
   };
+  return servers
+    .filter((server) => server.serverName !== exclude)
+    .sort((a, b) => rank(a) - rank(b));
 }
 
 function mapServers(rows: unknown): ServerOption[] {

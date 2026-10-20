@@ -51,11 +51,15 @@ elsewhere.
 Key modules:
 
 - `src/services/animeApiService.ts` — the API client. Base URL is overridable
-  with `VITE_ANIME_API_URL`.
+  with `VITE_ANIME_API_URL`. `getStream` asks for the default server first and,
+  if that only returns an embed, retries the alternatives in preference order
+  (see the server-selection note below).
 - `src/lib/streamProxy.ts` — shared proxy logic. Rewrites manifests so every
   child URI points back through the proxy. Used by **both** `api/stream.ts`
-  (Vercel edge function) and `worker/index.ts` (Cloudflare Worker); keep them
-  byte-for-byte consistent.
+  (Vercel edge function) and the dev plugin `vite-plugins/streamProxy.ts`; keep
+  them consistent. `ALLOWED_DOMAINS` is an allowlist of the stream CDN's
+  registrable domains — the CDN rotates hosts per episode, so add the domain,
+  not the hostname.
 - `src/lib/download/` — client-side downloader. Segments are fetched
   sequentially and streamed to disk via a File System Access handle or a Blob
   fallback, never buffered whole in memory.
@@ -66,6 +70,32 @@ Deployment notes: `vercel.json` holds the SPA rewrite. It excludes `api/`,
 `assets/` and anything with a file extension, so the edge function is not
 swallowed by the catch-all. `api/stream.ts` must stay on the edge runtime and
 must not import Node builtins.
+
+### Server selection, and why the default must not be trusted
+
+The upstream server list is ordered with `DatSaV` first, and the API resolves a
+request with no `server` parameter to that first entry. Measured against the live
+API, `DatSaV` answers with an embed page rather than a manifest for most
+episodes — the embed it points at (`play.echovideo.ru/embed-20/...`) returns
+404 — so a bare `GET /api/stream?id=<episode>` frequently yields something that
+can neither be played nor downloaded. `Vidplay` returned a direct HLS manifest
+for every episode sampled.
+
+Both clients therefore resolve streams through a preference list
+(`Vidplay`, `MyCloud`, `DatSaV`, `BYFMS`, `DGHG`) instead of trusting the API's
+default: try the default, and if it comes back embed-only walk the remaining
+servers until one yields a manifest. An explicit user pick is never overridden.
+Worst case this costs one extra request, and only in the case that used to fail.
+
+Two traps when touching this:
+
+- Do **not** filter candidates by track type. The upstream list labels every
+  entry `sub` (newer ones `ssub`) even when the server serves a dub, so a
+  `type`-filtered candidate list is empty for dubs and the fallback silently
+  does nothing.
+- Keep the preference list and fallback logic in step between
+  `src/services/animeApiService.ts` (`SERVER_PREFERENCE` / `rankServers`) and
+  `macapp/Sources/NyAnimeCore/AnimeAPI.swift` (`rank`).
 
 ## macOS app
 

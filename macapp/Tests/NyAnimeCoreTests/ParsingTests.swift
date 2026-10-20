@@ -317,4 +317,36 @@ final class LibraryStoreTests: XCTestCase {
         let later = await store.position(for: "74575_1")
         XCTAssertEqual(later, 120)
     }
+
+    // MARK: - Server preference
+
+    private func server(_ name: String, kind: StreamServer.Kind = .sub) -> StreamServer {
+        StreamServer(kind: kind, name: name, dataId: 1, serverId: 1)
+    }
+
+    /// The upstream list is ordered with `DatSaV` first, which is the whole
+    /// reason playback used to resolve to an embed-only server by default.
+    func testRankPrefersDirectStreamServersOverUpstreamOrder() {
+        let upstream = ["DatSaV", "BYFMS", "DGHG", "Vidplay"].map { server($0) }
+        let ranked = AnimeAPI.rank(upstream).map(\.name)
+        XCTAssertEqual(ranked.first, "Vidplay")
+    }
+
+    func testRankPutsUnknownServersLastButKeepsThem() {
+        let ranked = AnimeAPI.rank([server("BrandNew"), server("Vidplay")]).map(\.name)
+        XCTAssertEqual(ranked, ["Vidplay", "BrandNew"])
+    }
+
+    func testRankExcludesTheServerAlreadyTried() {
+        let ranked = AnimeAPI.rank([server("DatSaV"), server("Vidplay")], excluding: "DatSaV")
+        XCTAssertEqual(ranked.map(\.name), ["Vidplay"])
+    }
+
+    /// The upstream list labels every entry `sub`, including ones that serve a
+    /// dub, so ranking must not filter on the track kind or it would discard
+    /// the only working candidate.
+    func testRankKeepsCandidatesRegardlessOfTrackKind() {
+        let ranked = AnimeAPI.rank([server("Vidplay", kind: .dub), server("DatSaV", kind: .sub)])
+        XCTAssertEqual(ranked.map(\.name), ["Vidplay", "DatSaV"])
+    }
 }

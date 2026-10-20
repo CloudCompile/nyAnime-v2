@@ -166,11 +166,46 @@ public final class AnimeAPI: @unchecked Sendable {
         return results.arrayValue.compactMap(StreamServer.decode)
     }
 
+    /// Resolve a playable stream for an episode.
+    ///
+    /// When no server is named the API picks the *first* entry in the upstream
+    /// list, which is often `DatSaV`. That one usually answers with an embed
+    /// page rather than a manifest, so the default frequently resolves to
+    /// something AVPlayer cannot play. Ask for the default, and if it comes back
+    /// embed-only walk the alternatives in preference order. An explicit choice
+    /// is honoured as-is.
     public func stream(
         episodeKey: String,
         server: String? = nil,
         type: StreamServer.Kind? = nil,
         fallback: Bool = false
+    ) async throws -> StreamSource? {
+        if let server {
+            return try await requestStream(
+                episodeKey: episodeKey, server: server, type: type, fallback: fallback
+            )
+        }
+
+        let first = try await requestStream(
+            episodeKey: episodeKey, server: nil, type: type, fallback: fallback
+        )
+        guard let first else { return nil }
+        if first.fileURL != nil { return first }
+
+        for candidate in Self.rank(first.servers, excluding: first.server) {
+            let next = try await requestStream(
+                episodeKey: episodeKey, server: candidate.name, type: type, fallback: fallback
+            )
+            if let next, next.fileURL != nil { return next }
+        }
+        return first
+    }
+
+    private func requestStream(
+        episodeKey: String,
+        server: String?,
+        type: StreamServer.Kind?,
+        fallback: Bool
     ) async throws -> StreamSource? {
         var query: [String: String] = ["id": episodeKey]
         if let server { query["server"] = server }
@@ -178,6 +213,22 @@ public final class AnimeAPI: @unchecked Sendable {
         let path = fallback ? "/api/stream/fallback" : "/api/stream"
         let results = try await get(path, query, cacheLifetime: 60)
         return StreamSource.decode(results)
+    }
+
+    /// Servers that return a direct manifest, best first. Unlisted names sort
+    /// last so a new upstream server is still tried.
+    ///
+    /// Not filtered by track type: the upstream list labels every entry `sub`
+    /// (newer ones `ssub`) whatever the episode actually offers, so filtering
+    /// would discard the working candidates for a dub.
+    static func rank(_ servers: [StreamServer], excluding: String? = nil) -> [StreamServer] {
+        let preference = ["Vidplay", "MyCloud", "DatSaV", "BYFMS", "DGHG"]
+        func position(of server: StreamServer) -> Int {
+            preference.firstIndex(of: server.name) ?? preference.count
+        }
+        return servers
+            .filter { $0.name != excluding }
+            .sorted { position(of: $0) < position(of: $1) }
     }
 
     public func randomId() async throws -> String {

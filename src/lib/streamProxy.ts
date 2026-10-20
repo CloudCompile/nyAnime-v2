@@ -22,6 +22,7 @@ const ALLOWED_DOMAINS = [
   'dpopdrop89.store',
   'echovideo.to',
   'echovideo.ru',
+  'roburnt10.store',
 ];
 
 /** True when `hostname` is one of the allowed domains or a subdomain of one. */

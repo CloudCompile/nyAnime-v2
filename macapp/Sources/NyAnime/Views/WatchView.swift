@@ -13,6 +13,9 @@ struct WatchView: View {
 
     @State private var servers: [StreamServer] = []
     @State private var selectedServer: StreamServer?
+    /// True once the user picks a server themselves, so the automatic fallback
+    /// stops overriding their choice.
+    @State private var serverWasChosen = false
     @State private var source: StreamSource?
     @State private var status: LoadStatus = .idle
     @State private var showEpisodeList = false
@@ -253,7 +256,10 @@ struct WatchView: View {
     private var serverBinding: Binding<StreamServer?> {
         Binding(
             get: { selectedServer },
-            set: { selectedServer = $0 }
+            set: {
+                selectedServer = $0
+                serverWasChosen = true
+            }
         )
     }
 
@@ -296,12 +302,13 @@ struct WatchView: View {
         status = .loading
         servers = []
         selectedServer = nil
+        serverWasChosen = false
         do {
             let all = try await state.api.servers(episodeKey: episode.key)
             servers = all
             // Prefer a server known to expose a direct HLS link, so playback
             // starts in-app rather than in an embedded player.
-            selectedServer = all.first { $0.name == "Vidplay" } ?? all.first
+            selectedServer = AnimeAPI.rank(all).first
             if all.isEmpty { status = .failed("No servers were offered for this episode.") }
         } catch {
             status = .failed(error.localizedDescription)
@@ -314,11 +321,29 @@ struct WatchView: View {
         source = nil
         playback.stop()
         do {
-            let resolved = try await state.api.stream(
+            var resolved = try await state.api.stream(
                 episodeKey: episode.key,
                 server: server.name,
                 type: server.kind
             )
+
+            // An explicitly chosen server is respected, but the automatic pick
+            // falls through to the next candidate when it only offers an embed.
+            if resolved?.fileURL == nil, !serverWasChosen {
+                for candidate in AnimeAPI.rank(servers, excluding: server.name) {
+                    let next = try await state.api.stream(
+                        episodeKey: episode.key,
+                        server: candidate.name,
+                        type: candidate.kind
+                    )
+                    if let next, next.fileURL != nil {
+                        resolved = next
+                        selectedServer = candidate
+                        break
+                    }
+                }
+            }
+
             source = resolved
 
             guard let resolved else {
