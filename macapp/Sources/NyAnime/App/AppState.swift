@@ -1,4 +1,5 @@
 import SwiftUI
+import NyAnimeCore
 
 /// The single source of truth for the app.
 ///
