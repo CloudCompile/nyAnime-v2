@@ -30,13 +30,9 @@ await page.waitForSelector('video', { timeout: 30000 });
 await new Promise((r) => setTimeout(r, 4000));
 
 const state = await page.evaluate(async () => {
-  const deadline = Date.now() + 20000;
-  let v = null;
-  while (Date.now() < deadline) {
-    v = document.querySelector('video');
-    if (v) break;
-    await new Promise((r) => setTimeout(r, 250));
-  }
+  const deadline = Date.now() + 30000;
+  const lastError = { message: null };
+  let v = document.querySelector('video');
   if (!v) {
     return {
       error: 'no video element',
@@ -44,13 +40,21 @@ const state = await page.evaluate(async () => {
     };
   }
   v.muted = true;
-  try {
-    await v.play();
-  } catch (e) {
-    return { error: `play() rejected: ${e.message}`, src: v.currentSrc };
+
+  // The player swaps sources as it attaches, so a play() can be interrupted
+  // by a new load. That is transient; retry until playback actually starts.
+  while (Date.now() < deadline) {
+    v = document.querySelector('video') ?? v;
+    try {
+      if (v.paused) await v.play();
+      lastError.message = null;
+    } catch (e) {
+      lastError.message = e.message;
+    }
+    if (v.readyState >= 2 && v.currentTime > 0 && v.videoWidth > 0) break;
+    await new Promise((r) => setTimeout(r, 500));
   }
-  // Give the pipeline a moment to fetch and decode.
-  await new Promise((r) => setTimeout(r, 8000));
+
   return {
     src: v.currentSrc,
     readyState: v.readyState,
@@ -60,6 +64,7 @@ const state = await page.evaluate(async () => {
     videoWidth: v.videoWidth,
     videoHeight: v.videoHeight,
     error: v.error ? `${v.error.code}: ${v.error.message}` : null,
+    lastPlayRejection: lastError.message,
   };
 });
 
