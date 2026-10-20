@@ -7,7 +7,7 @@ interface CategoryRowProps {
   title: string;
   seeAllLink?: string;
   animeList: {
-    id: number;
+    id: string;
     title: string;
     image: string;
     category: string;

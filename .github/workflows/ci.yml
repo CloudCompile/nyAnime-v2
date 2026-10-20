@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The oldest macOS the app supports. Keep in step with `platforms` in
+  # macapp/Package.swift — a 2017 MacBook Pro tops out at Ventura.
+  MACOSX_DEPLOYMENT_TARGET: "13.0"
+
+jobs:
+  web:
+    name: Web app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+
+  core:
+    name: Swift core (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Swift
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq binutils libcurl4-openssl-dev libxml2-dev \
+            libz-dev libncurses-dev
+          SWIFT_URL=https://download.swift.org/swift-6.0.3-release/ubuntu2204/swift-6.0.3-RELEASE/swift-6.0.3-RELEASE-ubuntu22.04.tar.gz
+          curl -fsSL "$SWIFT_URL" -o /tmp/swift.tar.gz
+          mkdir -p /opt/swift
+          tar -xzf /tmp/swift.tar.gz -C /opt/swift --strip-components=1
+
+      - name: Build and test core
+        working-directory: macapp
+        run: |
+          export PATH=/opt/swift/usr/bin:$PATH
+          swift build
+          swift test
+
+  mac:
+    name: macOS app
+    # Runner hosts are Apple Silicon, so the binary is built for both
+    # architectures: x86_64 is what a 2017 Intel MacBook Pro actually executes.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and test
+        working-directory: macapp
+        run: |
+          swift build
+          swift test
+          swift build -c release --arch x86_64 --arch arm64
+
+      - name: Bundle NyAnime.app
+        working-directory: macapp
+        run: ./scripts/bundle-app.sh
+
+      - name: Verify bundle
+        working-directory: macapp
+        run: |
+          set -euo pipefail
+          APP=build/NyAnime.app
+          test -d "$APP"
+          echo "Minimum system version:"
+          /usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$APP/Contents/Info.plist"
+          echo "Architectures:"
+          lipo -archs "$APP/Contents/MacOS/NyAnime"
+          lipo -archs "$APP/Contents/MacOS/NyAnime" | grep -q x86_64
+          codesign --verify --verbose=2 "$APP" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NyAnime.app
+          path: macapp/build/NyAnime.app
+          if-no-files-found: error

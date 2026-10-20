@@ -8,19 +8,20 @@ import Header from '../components/Header';
 import AnimeCard from '../components/AnimeCard';
 import { UserIcon, Settings, LogOut, Edit2 } from 'lucide-react';
 import { UserData, getUserData } from '@/services/authService';
+import { fetchAnimeByRouteId } from '@/hooks/useAnimeData';
 
 interface UserProfile {
   id: string;
   username: string;
   email: string;
   avatar?: string;
-  watchlist: Array<{animeId: number, addedAt: Date}>;
-  history: Array<{animeId: number, episodeId: number, progress: number, timestamp: number, lastWatched: Date}>;
-  favorites: Array<{animeId: number, addedAt: Date}>;
+  watchlist: Array<{animeId: string, addedAt: Date}>;
+  history: Array<{animeId: string, episodeId: number, progress: number, timestamp: number, lastWatched: Date}>;
+  favorites: Array<{animeId: string, addedAt: Date}>;
 }
 
 interface AnimeCardProps {
-  id: number;
+  id: string;
   title: string;
   image: string;
   category: string;
@@ -47,43 +48,54 @@ const Profile = () => {
       navigate('/signin');
       return;
     }
+    let cancelled = false;
 
-    getUserData(userId)
-      .then(userData => {
-        const profile: UserProfile = {
+    (async () => {
+      try {
+        const userData = await getUserData(userId);
+        if (cancelled) return;
+        const [watchlistCards, historyCards, favoriteCards] = await Promise.all([
+          transformToAnimeCards(userData.watchlist.map((item) => item.animeId)),
+          transformToAnimeCards(userData.history.map((item) => item.animeId)),
+          transformToAnimeCards(userData.favorites.map((item) => item.animeId)),
+        ]);
+        if (cancelled) return;
+
+        setUser({
           id: userData.id,
           username: userData.username,
           email: userData.email,
           avatar: userData.avatar,
           watchlist: userData.watchlist,
           history: userData.history,
-          favorites: userData.favorites
-        };
-        
-        setUser(profile);
+          favorites: userData.favorites,
+        });
         setEditedUsername(userData.username);
-        
-        setWatchlist(transformToAnimeCards(userData.watchlist.map(item => item.animeId)));
-        
-        const historyCards = transformToAnimeCards(userData.history.map(item => item.animeId));
-        setHistory(historyCards.map((card, index) => ({
-          ...card,
-          progress: userData.history[index]?.progress || 0
-        })));
-        
-        setFavorites(transformToAnimeCards(userData.favorites.map(item => item.animeId)));
-        
-        setIsLoading(false);
-      })
-      .catch(error => {
-        console.error("Failed to fetch user data:", error);
+        setWatchlist(watchlistCards);
+        setHistory(
+          historyCards.map((card, index) => ({
+            ...card,
+            progress: userData.history[index]?.progress || 0,
+          })),
+        );
+        setFavorites(favoriteCards);
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Failed to fetch user data:', error);
         toast({
-          title: "Error loading profile",
-          description: "Please try again later",
-          variant: "destructive",
+          title: 'Error loading profile',
+          description: 'Please try again later',
+          variant: 'destructive',
         });
         navigate('/signin');
-      });
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [navigate, toast]);
 
   const handleLogout = () => {
@@ -123,66 +135,27 @@ const Profile = () => {
     navigate('/settings');
   };
 
-  const transformToAnimeCards = (animeIds: number[]): AnimeCardProps[] => {
-    const animeData: Record<number, Omit<AnimeCardProps, 'id'>> = {
-      1: {
-        title: "Attack on Titan",
-        image: "/placeholder.svg",
-        category: "Action, Drama",
-        rating: "4.8",
-        year: "2013",
-        episodes: 75,
-      },
-      2: {
-        title: "Demon Slayer",
-        image: "/placeholder.svg",
-        category: "Action, Supernatural",
-        rating: "4.7",
-        year: "2019",
-        episodes: 44,
-      },
-      3: {
-        title: "Jujutsu Kaisen",
-        image: "/placeholder.svg",
-        category: "Action, Supernatural",
-        rating: "4.8",
-        year: "2020",
-        episodes: 24,
-      },
-      4: {
-        title: "My Hero Academia",
-        image: "/placeholder.svg",
-        category: "Action, Superhero",
-        rating: "4.6",
-        year: "2016",
-        episodes: 113,
-      },
-      5: {
-        title: "One Piece",
-        image: "/placeholder.svg",
-        category: "Adventure, Fantasy",
-        rating: "4.9",
-        year: "1999",
-        episodes: 1000,
-      },
-    };
-    
-    return animeIds.map(id => {
-      const anime = animeData[id];
-      if (anime) {
-        return { id, ...anime };
-      } else {
+  /**
+   * Resolve stored ids into real cards. The catalogue API is the source of
+   * truth for titles and artwork, so the placeholders this page used to show
+   * are gone.
+   */
+  const transformToAnimeCards = async (animeIds: string[]): Promise<AnimeCardProps[]> => {
+    const unique = Array.from(new Set(animeIds));
+    return Promise.all(
+      unique.map(async (id): Promise<AnimeCardProps> => {
+        const anime = await fetchAnimeByRouteId(id).catch(() => null);
         return {
           id,
-          title: `Anime ${id}`,
-          image: "/placeholder.svg",
-          category: "Unknown",
-          rating: "N/A",
-          year: "2023",
-          episodes: 12,
+          title: anime?.title ?? `Anime ${id}`,
+          image: anime?.image || '/placeholder.svg',
+          category: anime?.category ?? 'Unknown',
+          rating: anime?.rating ?? 'N/A',
+          year: anime?.year ?? 'N/A',
+          episodes: anime?.episodes ?? 0,
         };
-      }
-    });
+      }),
+    );
   };
 
   if (isLoading) {
