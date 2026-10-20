@@ -98,7 +98,7 @@ jobs:
     name: macOS app
     # Runner hosts are Apple Silicon, so the binary is built for both
     # architectures: x86_64 is what a 2017 Intel MacBook Pro actually executes.
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
 

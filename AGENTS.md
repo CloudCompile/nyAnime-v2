@@ -106,3 +106,11 @@ Removing that step needs a Developer ID signature and notarization.
 web-browser (headless Chrome playback and download against the real CDN),
 core (Swift on Linux, including the live API and CDN suite), and mac (build,
 test, bundle a universal app, upload the artifact).
+
+The browser harnesses need a browser that can decode H.264/AAC. The streams are
+MPEG-TS and hls.js only plays them by transmuxing to fMP4 for Media Source
+Extensions, so a codec-less Chromium stalls at `readyState 0` with no error and
+churns through hundreds of segments. `tools/chrome.mjs` therefore prefers Google
+Chrome. Note that `canPlayType` reports `probably` even in browsers that cannot
+actually decode, so a passing codec probe does not rule this out — check the
+`200 video/mp2t` count in the harness output instead.
