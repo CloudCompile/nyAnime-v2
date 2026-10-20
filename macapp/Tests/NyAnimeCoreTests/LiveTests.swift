@@ -1,6 +1,27 @@
 import XCTest
 @testable import NyAnimeCore
 
+/// Collects progress reported from a background executor.
+///
+/// The downloader invokes its callback off the calling thread, so the array
+/// needs a lock; capturing a bare `var` trips the concurrency checker.
+private final class ProgressCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [DownloadProgress] = []
+
+    func append(_ progress: DownloadProgress) {
+        lock.lock()
+        stored.append(progress)
+        lock.unlock()
+    }
+
+    var updates: [DownloadProgress] {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
+}
+
 /// Tests that talk to the real API and CDN.
 ///
 /// Skipped by default so the suite stays hermetic. Run with:
@@ -127,12 +148,13 @@ final class LiveTests: XCTestCase {
             .appendingPathComponent("nyanime-live-\(UUID().uuidString).ts")
         defer { try? FileManager.default.removeItem(at: destination) }
 
-        var updates: [DownloadProgress] = []
+        let collector = ProgressCollector()
         let downloader = SegmentDownloader(fetcher: fetcher, concurrency: 2)
         let bytes = try await downloader.download(playlist: slice, to: destination) { progress in
-            updates.append(progress)
+            collector.append(progress)
         }
 
+        let updates = collector.updates
         XCTAssertGreaterThan(bytes, 100_000, "downloaded data looks too small")
         XCTAssertFalse(updates.isEmpty, "no progress was reported")
         XCTAssertEqual(updates.last?.completedSegments, 4)
