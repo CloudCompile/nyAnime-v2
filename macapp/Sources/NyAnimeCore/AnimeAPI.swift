@@ -221,7 +221,7 @@ public final class AnimeAPI: @unchecked Sendable {
     /// Not filtered by track type: the upstream list labels every entry `sub`
     /// (newer ones `ssub`) whatever the episode actually offers, so filtering
     /// would discard the working candidates for a dub.
-    static func rank(_ servers: [StreamServer], excluding: String? = nil) -> [StreamServer] {
+    public static func rank(_ servers: [StreamServer], excluding: String? = nil) -> [StreamServer] {
         let preference = ["Vidplay", "MyCloud", "DatSaV", "BYFMS", "DGHG"]
         func position(of server: StreamServer) -> Int {
             preference.firstIndex(of: server.name) ?? preference.count
