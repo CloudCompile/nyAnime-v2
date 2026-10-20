@@ -40,6 +40,12 @@ final class LiveTests: XCTestCase {
 
     private var fetcher: StreamFetcher { Self.sharedFetcher }
 
+    /// Shared for the same reason as `sharedFetcher`: a per-test `AnimeAPI`
+    /// would be deallocated while libcurl is still unwinding.
+    private static let sharedAPI = AnimeAPI()
+
+    private var api: AnimeAPI { Self.sharedAPI }
+
     private var enabled: Bool {
         ProcessInfo.processInfo.environment["NYANIME_LIVE_TESTS"] == "1"
     }
@@ -50,7 +56,7 @@ final class LiveTests: XCTestCase {
 
     func testHomeFeedDecodesRealPayload() async throws {
         try requireLive()
-        let feed = try await AnimeAPI().home()
+        let feed = try await api.home()
 
         XCTAssertFalse(feed.trending.isEmpty, "expected a trending list")
         XCTAssertFalse(feed.genres.isEmpty, "expected genres")
@@ -62,7 +68,6 @@ final class LiveTests: XCTestCase {
 
     func testSearchAndInfoResolveToStreamableAnime() async throws {
         try requireLive()
-        let api = AnimeAPI()
 
         let results = try await api.search(keyword: "frieren")
         XCTAssertFalse(results.isEmpty, "search returned nothing")
@@ -81,7 +86,7 @@ final class LiveTests: XCTestCase {
 
     func testBrowsePaginationReportsMorePages() async throws {
         try requireLive()
-        let page = try await AnimeAPI().browse(route: "genre/action", page: 1)
+        let page = try await api.browse(route: "genre/action", page: 1)
         XCTAssertFalse(page.items.isEmpty)
         // Regression guard: category routes send `totalPages`, not `totalPage`.
         // Reading the wrong key left pagination stuck on page 1.
@@ -92,14 +97,13 @@ final class LiveTests: XCTestCase {
     func testFilterPaginationUsesSnakeCaseField() async throws {
         try requireLive()
         // /api/filter is the one route that sends `totalPage`.
-        let page = try await AnimeAPI().filter(FilterParams(keyword: "naruto"))
+        let page = try await api.filter(FilterParams(keyword: "naruto"))
         XCTAssertFalse(page.items.isEmpty)
         XCTAssertGreaterThanOrEqual(page.totalPages, 1)
     }
 
     func testResolveDirectStreamAndParseRealPlaylists() async throws {
         try requireLive()
-        let api = AnimeAPI()
 
         let episodes = try await api.episodes(id: "sousou-no-frieren-74575")
         let episode = try XCTUnwrap(episodes.first)
@@ -125,7 +129,6 @@ final class LiveTests: XCTestCase {
 
     func testDownloadRealSegmentsToDisk() async throws {
         try requireLive()
-        let api = AnimeAPI()
         let fetcher = self.fetcher
 
         let episodes = try await api.episodes(id: "sousou-no-frieren-74575")
@@ -168,7 +171,6 @@ final class LiveTests: XCTestCase {
 
     func testQualityCapSelectsRealLowerRendition() async throws {
         try requireLive()
-        let api = AnimeAPI()
         let fetcher = self.fetcher
 
         let episodes = try await api.episodes(id: "sousou-no-frieren-74575")
@@ -181,6 +183,16 @@ final class LiveTests: XCTestCase {
         XCTAssertFalse(variants.isEmpty)
 
         let capped = fetcher.selectVariant(from: variants, preferredHeight: 480)
-        XCTAssertLessThanOrEqual(capped.height, 480)
+        // The rule is "best rendition at or below the cap, else the best
+        // available". Some masters ship a single rendition, so a cap below
+        // everything legitimately returns something taller.
+        let eligible = variants.filter { $0.height > 0 && $0.height <= 480 }
+        if let best = eligible.max(by: { $0.height < $1.height }) {
+            XCTAssertEqual(capped.height, best.height)
+        } else {
+            XCTAssertEqual(capped.height, variants.map(\.height).max())
+        }
+        // Whatever is chosen must be one of the renditions the master offered.
+        XCTAssertTrue(variants.contains { $0.height == capped.height })
     }
 }

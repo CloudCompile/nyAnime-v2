@@ -13,7 +13,6 @@
   ],
   "rewrites": [
     {
-      "comment": "SPA fallback for client-side routes; /api and real files are excluded.",
       "source": "/((?!api/|assets/|[^/]*\\.[^/]*$).*)",
       "destination": "/index.html"
     }
