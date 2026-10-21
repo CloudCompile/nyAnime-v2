@@ -8,9 +8,9 @@ import { useNavigate } from 'react-router-dom';
 import { isLoggedIn, getCurrentUserData } from '../services/authService';
 
 interface CommentProps {
-  animeId: number;
+  animeId: string;
   comments: {
-    id: number;
+    id: string;
     user: {
       username: string;
       avatar?: string;

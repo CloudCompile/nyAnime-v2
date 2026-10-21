@@ -1,196 +1,131 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Star, Play, Calendar, Clock, List, Heart, PlusCircle, CheckCircle } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  Calendar,
+  Clock,
+  Download,
+  Heart,
+  List,
+  Play,
+  PlusCircle,
+  Star,
+} from 'lucide-react';
 import Header from '../components/Header';
 import CategoryRow from '../components/CategoryRow';
-import { useAnimeById, useSimilarAnime } from '../hooks/useAnimeData';
+import DownloadPanel from '../components/DownloadPanel';
+import { useAnimeDetail, useSimilarAnime, type AnimeData } from '../hooks/useAnimeData';
 import { useAnimeCharacters, useAnimeReviews } from '../hooks/useAnimeDetails';
+import { getEpisodes, type EpisodeSummary } from '../services/animeApiService';
+import { useDownloads } from '../hooks/useDownloads';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
-import { fetchEpisodes, EpisodeInfo } from '../services/videoSourceService';
-import CommentsSection from '../components/CommentsSection';
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { addToWatchlist, getUserData } from '@/services/authService';
+import { addToWatchlist, getCurrentUserData, getUserData } from '@/services/authService';
 
 const AnimeDetails = () => {
-  const { id } = useParams();
+  const { id = '' } = useParams();
   const navigate = useNavigate();
-  const animeId = id ? parseInt(id) : 0;
-  
-  const { data: anime, isLoading: animeLoading } = useAnimeById(animeId);
-  const { data: similarAnime = [], isLoading: similarLoading } = useSimilarAnime(animeId);
-  const { data: characters = [], isLoading: charactersLoading } = useAnimeCharacters(animeId);
-  const { data: reviews = [], isLoading: reviewsLoading } = useAnimeReviews(animeId);
-  
-  const [progress, setProgress] = useState(0);
-  const [isTrailerModalOpen, setIsTrailerModalOpen] = useState(false);
-  const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
-  const [isLoadingEpisodes, setIsLoadingEpisodes] = useState(false);
-  const [animeComments, setAnimeComments] = useState<any[]>([]);
+  const { data: anime, isLoading } = useAnimeDetail(id);
+  const { data: similar = [] } = useSimilarAnime(id);
+  const { data: characters = [] } = useAnimeCharacters(anime?.title ?? '');
+  const { data: reviews = [] } = useAnimeReviews(id);
+  const { enqueue } = useDownloads();
+
+  const [episodes, setEpisodes] = useState<EpisodeSummary[]>([]);
   const [isInWatchlist, setIsInWatchlist] = useState(false);
-  const [isAddingToWatchlist, setIsAddingToWatchlist] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
 
   useEffect(() => {
-    const savedComments = localStorage.getItem(`anime_comments_${animeId}`);
-    if (savedComments) {
-      setAnimeComments(JSON.parse(savedComments));
-    }
-    
-    if (anime) {
-      const savedProgress = localStorage.getItem(`anime_progress_${animeId}`);
-      if (savedProgress) {
-        setProgress(parseInt(savedProgress));
-      } else {
-        const randomProgress = Math.floor(Math.random() * 80);
-        setProgress(randomProgress);
-      }
-      
-      const getEpisodes = async () => {
-        setIsLoadingEpisodes(true);
-        try {
-          const apiEpisodes = await fetchEpisodes(id || '0', anime.title);
-          setEpisodes(apiEpisodes);
-        } catch (error) {
-          console.error('Error fetching episodes:', error);
-          const fallbackEpisodes = Array.from({ length: anime.episodes || 12 }, (_, i) => ({
-            id: `${id}-episode-${i + 1}`,
-            number: i + 1,
-            title: `Episode ${i + 1}`,
-            released: true,
-            image: `${import.meta.env.VITE_EPISODE_THUMBNAIL_CDN}/${id || '1'}.jpg`,
-            thumbnailUrl: `${import.meta.env.VITE_EPISODE_THUMBNAIL_CDN}/${id || '1'}.jpg`
-          }));
-          setEpisodes(fallbackEpisodes);
-        } finally {
-          setIsLoadingEpisodes(false);
-        }
-      };
-      
-      getEpisodes();
-      
-      const checkWatchlist = async () => {
-        const userId = localStorage.getItem('userId');
-        if (userId) {
-          try {
-            const userData = await getUserData(userId);
-            const inWatchlist = userData.watchlist.some(item => item.animeId === animeId);
-            setIsInWatchlist(inWatchlist);
-          } catch (error) {
-            console.error('Error checking watchlist:', error);
-          }
-        }
-      };
-      
-      checkWatchlist();
-    }
-  }, [anime, animeId, id]);
+    if (!id) return;
+    let cancelled = false;
+    getEpisodes(id)
+      .then((list) => {
+        if (!cancelled) setEpisodes(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    const user = getCurrentUserData();
+    if (!user) return;
+    let cancelled = false;
+    getUserData(user.id)
+      .then((data) => {
+        if (cancelled) return;
+        setIsInWatchlist(data.watchlist.some((item) => String(item.animeId) === id));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   const handleAddToWatchlist = async () => {
-    const userId = localStorage.getItem('userId');
-    if (!userId) {
-      toast({
-        title: "Login Required",
-        description: "Please login to add anime to your watchlist",
-        variant: "destructive",
-      });
+    const user = getCurrentUserData();
+    if (!user) {
+      toast({ title: 'Sign in required', description: 'Please sign in to use your watchlist.' });
       navigate('/signin');
       return;
     }
-    
-    setIsAddingToWatchlist(true);
+    setIsAdding(true);
     try {
-      await addToWatchlist(userId, animeId);
+      await addToWatchlist(user.id, id);
       setIsInWatchlist(true);
-      toast({
-        title: "Added to Watchlist",
-        description: `${anime?.title} has been added to your watchlist`,
-      });
+      toast({ title: 'Added to watchlist', description: anime?.title ?? 'Anime added.' });
     } catch (error) {
-      console.error('Error adding to watchlist:', error);
       toast({
-        title: "Error",
-        description: "Failed to add to watchlist. Please try again.",
-        variant: "destructive",
+        title: 'Could not update watchlist',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
       });
     } finally {
-      setIsAddingToWatchlist(false);
+      setIsAdding(false);
     }
   };
 
-  const fallbackTrailerIds = {
-    '43349': 'MGRm4IzK1SQ',
-    '5114': 'cUFoQ-Hl0h4',
-    '44511': 'Z1zx8LcRdBk',
-    '1735': 'QsYho_fujTY',
-    '25777': '6ohYYtxfDTs',
-    '21': 'oE8xZeYmZ2I',
-    '11061': 'NlJZ-YgAt-c',
-    '40748': '9MnQ0P_79pM',
+  const downloadAll = () => {
+    if (!anime || episodes.length === 0) return;
+    const added = enqueue(anime.title, episodes);
+    toast({
+      title: added > 0 ? `Queued ${added} episodes` : 'Already queued',
+      description: added > 0 ? 'Track progress in the downloads panel.' : undefined,
+    });
   };
 
-  const getTrailerId = () => {
-    if (anime && anime.trailerId) {
-      return anime.trailerId;
-    }
-    
-    if (id && fallbackTrailerIds[id as keyof typeof fallbackTrailerIds]) {
-      return fallbackTrailerIds[id as keyof typeof fallbackTrailerIds];
-    }
-    
-    return 'QsYho_fujTY';
-  };
+  const asCardList = (items: AnimeData[]) =>
+    items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      image: item.image,
+      category: item.category,
+      rating: item.rating,
+      year: item.year,
+      episodes: item.episodes,
+    }));
 
-  const openTrailerModal = () => {
-    setIsTrailerModalOpen(true);
-  };
-
-  const closeTrailerModal = () => {
-    setIsTrailerModalOpen(false);
-  };
-
-  const handleWatchEpisode = (episodeNumber: number) => {
-    navigate(`/anime/${id}/watch?episode=${episodeNumber}`);
-  };
-
-  const handleAddComment = (text: string) => {
-    const newComment = {
-      id: Date.now(),
-      user: {
-        username: 'You',
-        avatar: 'https://i.pravatar.cc/150?img=3'
-      },
-      text,
-      date: new Date().toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      })
-    };
-    
-    const updatedComments = [newComment, ...animeComments];
-    setAnimeComments(updatedComments);
-    
-    localStorage.setItem(`anime_comments_${animeId}`, JSON.stringify(updatedComments));
-  };
-
-  if (animeLoading || !anime) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-anime-darker">
         <Header />
-        <div className="container mx-auto px-4 py-16">
-          <div className="w-full h-[300px] bg-anime-gray/30 animate-pulse rounded-xl mb-6"></div>
-          <div className="w-3/4 h-8 bg-anime-gray/30 animate-pulse rounded-lg mb-4"></div>
-          <div className="w-1/2 h-6 bg-anime-gray/30 animate-pulse rounded-lg mb-8"></div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-2">
-              <div className="w-full h-[400px] bg-anime-gray/30 animate-pulse rounded-lg"></div>
-            </div>
-            <div>
-              <div className="w-full h-[400px] bg-anime-gray/30 animate-pulse rounded-lg"></div>
-            </div>
-          </div>
+        <div className="flex min-h-[60vh] items-center justify-center text-white/70">
+          Loading anime…
+        </div>
+      </div>
+    );
+  }
+
+  if (!anime) {
+    return (
+      <div className="min-h-screen bg-anime-darker">
+        <Header />
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
+          <p className="text-white/80">This anime could not be found in the catalogue.</p>
+          <Button onClick={() => navigate('/')}>Back to home</Button>
         </div>
       </div>
     );
@@ -199,391 +134,196 @@ const AnimeDetails = () => {
   return (
     <div className="min-h-screen bg-anime-darker">
       <Header />
-      
-      <div 
-        className="relative w-full h-[50vh] bg-cover bg-center"
-        style={{
-          backgroundImage: `linear-gradient(to bottom, rgba(13, 13, 21, 0.3), rgba(13, 13, 21, 0.9)), url(${anime.image})`
-        }}
-      >
-        <div className="absolute top-24 left-4 sm:top-20 z-10">
-          <Button 
-            variant="outline" 
-            className="bg-black/30 backdrop-blur-md border-white/10 text-white hover:bg-white/20"
-            onClick={() => navigate(-1)}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-        </div>
-        
-        <div className="container mx-auto px-4 h-full flex flex-col justify-end pb-8">
-          <div className="flex flex-col md:flex-row items-start md:items-end gap-8">
-            <div className="w-32 h-48 md:w-40 md:h-60 rounded-lg overflow-hidden shadow-xl glass-card flex-shrink-0 -mt-16">
-              <img 
-                src={anime.image} 
-                alt={anime.title} 
-                className="w-full h-full object-cover"
-              />
-            </div>
-            
-            <div className="flex-1">
-              <div className="inline-flex items-center bg-anime-purple/20 backdrop-blur-sm px-3 py-1 rounded-full mb-4">
-                <span className="text-xs font-medium text-white">{anime.category}</span>
-                <div className="mx-2 h-3 w-px bg-white/20"></div>
-                <div className="flex items-center">
-                  <Star className="w-3 h-3 text-yellow-400 mr-1" fill="currentColor" />
-                  <span className="text-xs font-medium text-white">{anime.rating}</span>
-                </div>
-              </div>
-              
-              <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">{anime.title}</h1>
-              
-              <div className="flex flex-wrap items-center text-sm text-white/70 gap-x-4 gap-y-2 mb-4">
-                <div className="flex items-center">
-                  <Calendar className="h-4 w-4 mr-1" />
-                  <span>{anime.year}</span>
-                </div>
-                {anime.episodes && (
-                  <div className="flex items-center">
-                    <List className="h-4 w-4 mr-1" />
-                    <span>{anime.episodes} Episodes</span>
-                  </div>
+
+      <section className="relative h-[45vh] w-full overflow-hidden md:h-[55vh]">
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `linear-gradient(to bottom, rgba(13,13,21,0.4), rgba(13,13,21,0.95)), url('${anime.poster ?? ''}')`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        />
+        <div className="absolute inset-0 flex items-end">
+          <div className="container mx-auto flex gap-6 px-4 pb-8 md:px-6">
+            <img
+              src={anime.poster}
+              alt={anime.title}
+              className="hidden w-40 rounded-lg shadow-lg md:block"
+            />
+            <div className="max-w-3xl">
+              <Button variant="ghost" className="mb-3 text-white/80 hover:text-white" asChild>
+                <Link to="/">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Home
+                </Link>
+              </Button>
+              <h1 className="mb-2 text-3xl font-bold text-white md:text-4xl">{anime.title}</h1>
+              {anime.japaneseTitle && (
+                <p className="mb-3 text-sm text-white/60">{anime.japaneseTitle}</p>
+              )}
+              <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-white/80">
+                {anime.score && (
+                  <span className="flex items-center gap-1">
+                    <Star className="h-4 w-4 text-yellow-400" fill="currentColor" />
+                    {anime.score}
+                  </span>
                 )}
-                <div className="flex items-center">
-                  <Clock className="h-4 w-4 mr-1" />
-                  <span>24 min/ep</span>
-                </div>
+                {anime.premiered && (
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    {anime.premiered}
+                  </span>
+                )}
+                {anime.duration && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-4 w-4" />
+                    {anime.duration}
+                  </span>
+                )}
+                {anime.totalEpisodes && (
+                  <span className="flex items-center gap-1">
+                    <List className="h-4 w-4" />
+                    {anime.totalEpisodes} episodes
+                  </span>
+                )}
+                {anime.status && <span>{anime.status}</span>}
               </div>
-              
               <div className="flex flex-wrap gap-3">
-                <Button 
-                  className="bg-anime-purple hover:bg-anime-purple/90"
-                  onClick={() => navigate(`/anime/${id}/watch?episode=1`)}
-                >
-                  <Play className="h-4 w-4 mr-2" /> Watch Now
+                <Button onClick={() => navigate(`/anime/${id}/watch`)}>
+                  <Play className="mr-2 h-4 w-4" />
+                  Watch now
                 </Button>
-                <Button 
-                  variant="outline" 
-                  className="bg-white/10 border-white/10 text-white hover:bg-white/20"
+                <Button
+                  variant="secondary"
                   onClick={handleAddToWatchlist}
-                  disabled={isAddingToWatchlist || isInWatchlist}
+                  disabled={isAdding || isInWatchlist}
                 >
                   {isInWatchlist ? (
                     <>
-                      <CheckCircle className="h-4 w-4 mr-2" /> In Watchlist
+                      <Heart className="mr-2 h-4 w-4" fill="currentColor" />
+                      In watchlist
                     </>
                   ) : (
                     <>
-                      <PlusCircle className="h-4 w-4 mr-2" /> Add to List
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      Add to watchlist
                     </>
                   )}
                 </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div className="container mx-auto px-4 py-8">
-        <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="bg-anime-dark mb-6">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="episodes">Episodes</TabsTrigger>
-            <TabsTrigger value="characters">Characters</TabsTrigger>
-            <TabsTrigger value="reviews">Reviews</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="overview" className="mt-0">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2">
-                <div className="glass-card p-6 rounded-xl mb-6">
-                  <h2 className="text-xl font-bold text-white mb-4">Synopsis</h2>
-                  <p className="text-white/80 leading-relaxed">
-                    {anime.synopsis || 
-                      "No synopsis available for this anime. We'll update this information soon!"}
-                  </p>
-                </div>
-                
-                <div className="glass-card p-6 rounded-xl">
-                  <h2 className="text-xl font-bold text-white mb-4">Trailer</h2>
-                  <div 
-                    className="aspect-video bg-anime-gray rounded-lg overflow-hidden cursor-pointer relative"
-                    onClick={openTrailerModal}
-                  >
-                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                      <Button className="bg-anime-purple hover:bg-anime-purple/90">
-                        <Play className="h-6 w-6" /> Watch Trailer
-                      </Button>
-                    </div>
-                    <img 
-                      src={`https://img.youtube.com/vi/${getTrailerId()}/maxresdefault.jpg`} 
-                      alt="Trailer thumbnail"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              <div>
-                <div className="glass-card p-6 rounded-xl">
-                  <h2 className="text-xl font-bold text-white mb-4">Details</h2>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="text-white/60 text-sm">Studios</h3>
-                      <p className="text-white">Studio MAPPA</p>
-                    </div>
-                    
-                    <div>
-                      <h3 className="text-white/60 text-sm">Genres</h3>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {anime.category.split(',').map((genre: string, index: number) => (
-                          <span 
-                            key={index} 
-                            className="px-3 py-1 bg-white/10 rounded-full text-xs text-white cursor-pointer hover:bg-anime-purple/20"
-                            onClick={() => navigate(`/anime?genre=${encodeURIComponent(genre.trim())}`)}
-                          >
-                            {genre.trim()}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <h3 className="text-white/60 text-sm">Status</h3>
-                      <p className="text-white">Finished Airing</p>
-                    </div>
-                    
-                    <div>
-                      <h3 className="text-white/60 text-sm">Season</h3>
-                      <p className="text-white">Fall {anime.year}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="episodes">
-            <div className="glass-card p-6 rounded-xl">
-              <h2 className="text-xl font-bold text-white mb-4">Episodes</h2>
-              
-              {isLoadingEpisodes ? (
-                <div className="space-y-4">
-                  {[...Array(5)].map((_, index) => (
-                    <div key={index} className="flex gap-4 p-4 rounded-lg">
-                      <div className="w-40 h-24 bg-anime-gray/30 animate-pulse rounded-lg"></div>
-                      <div className="flex-1">
-                        <div className="w-1/3 h-5 bg-anime-gray/30 animate-pulse rounded-lg mb-2"></div>
-                        <div className="w-2/3 h-4 bg-anime-gray/30 animate-pulse rounded-lg"></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {episodes.map((episode, index) => (
-                    <div 
-                      key={episode.id || index} 
-                      className="flex flex-col sm:flex-row gap-4 p-4 rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
-                      onClick={() => handleWatchEpisode(episode.number || index + 1)}
-                    >
-                      <div className="w-full sm:w-40 h-24 bg-anime-gray rounded-lg overflow-hidden flex-shrink-0">
-                        <img 
-                          src={anime.image} 
-                          alt={`Episode ${episode.number || index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      
-                      <div className="flex-1">
-                        <div className="flex justify-between">
-                          <h3 className="font-medium text-white">
-                            Episode {episode.number || index + 1}
-                          </h3>
-                          <span className="text-white/60 text-sm">24:00</span>
-                        </div>
-                        <p className="text-white/70 text-sm line-clamp-2 mt-1">
-                          {episode.title || `Episode ${episode.number || index + 1} description goes here. This is a placeholder for the episode description.`}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="characters">
-            <div className="glass-card p-6 rounded-xl">
-              <h2 className="text-xl font-bold text-white mb-4">Characters</h2>
-              
-              {charactersLoading ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                  {[...Array(10)].map((_, index) => (
-                    <div key={index} className="text-center">
-                      <div className="w-full aspect-[3/4] bg-anime-gray/30 animate-pulse rounded-lg overflow-hidden mb-2"></div>
-                      <div className="h-5 bg-anime-gray/30 animate-pulse rounded-lg mb-1 w-3/4 mx-auto"></div>
-                      <div className="h-4 bg-anime-gray/30 animate-pulse rounded-lg w-1/2 mx-auto"></div>
-                    </div>
-                  ))}
-                </div>
-              ) : characters.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-white/60">No character information available.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                  {characters.map((character) => (
-                    <div key={character.id} className="text-center">
-                      <div className="w-full aspect-[3/4] bg-anime-gray rounded-lg overflow-hidden mb-2 relative group">
-                        <img 
-                          src={character.image} 
-                          alt={character.name}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="absolute bottom-2 left-2 right-2">
-                            <span className="text-xs bg-anime-purple/80 text-white px-2 py-1 rounded-full">
-                              {character.role || 'Character'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <h3 className="font-medium text-white text-sm line-clamp-1">{character.name}</h3>
-                      {character.voiceActor && (
-                        <p className="text-white/60 text-xs line-clamp-1">{character.voiceActor.name}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="reviews" id="reviews">
-            <div className="glass-card p-6 rounded-xl mb-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-white">Reviews</h2>
-                <Button 
-                  variant="outline" 
-                  className="bg-white/10 border-white/10 text-white hover:bg-white/20"
-                  onClick={() => {
-                    if (!document.getElementById('comments')) return;
-                    document.getElementById('comments')?.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                >
-                  Write a Review
+                <Button variant="secondary" onClick={downloadAll} disabled={episodes.length === 0}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download all
                 </Button>
               </div>
-              
-              {reviewsLoading ? (
-                <div className="space-y-6">
-                  {[...Array(3)].map((_, index) => (
-                    <div key={index} className="border-b border-white/10 pb-6 last:border-0">
-                      <div className="flex justify-between mb-2">
-                        <div className="flex items-center">
-                          <div className="w-10 h-10 rounded-full bg-anime-gray/30 animate-pulse mr-3"></div>
-                          <div>
-                            <div className="h-5 w-24 bg-anime-gray/30 animate-pulse rounded mb-1"></div>
-                            <div className="h-4 w-16 bg-anime-gray/30 animate-pulse rounded"></div>
-                          </div>
-                        </div>
-                        <div className="flex items-center">
-                          <Star className="w-4 h-4 text-yellow-400 mr-1" fill="currentColor" />
-                          <div className="h-4 w-10 bg-anime-gray/30 animate-pulse rounded"></div>
-                        </div>
-                      </div>
-                      <div className="h-4 w-full bg-anime-gray/30 animate-pulse rounded mb-1"></div>
-                      <div className="h-4 w-4/5 bg-anime-gray/30 animate-pulse rounded mb-1"></div>
-                      <div className="h-4 w-2/3 bg-anime-gray/30 animate-pulse rounded"></div>
-                    </div>
-                  ))}
-                </div>
-              ) : reviews.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-white/60">No reviews yet. Be the first to review this anime!</p>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {reviews.map((review) => (
-                    <div key={review.id} className="border-b border-white/10 pb-6 last:border-0">
-                      <div className="flex justify-between mb-2">
-                        <div className="flex items-center">
-                          <Avatar className="h-10 w-10 mr-3">
-                            <AvatarImage src={review.user.avatar} alt={review.user.username} />
-                            <AvatarFallback>{review.user.username.substring(0, 2).toUpperCase()}</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <h3 className="font-medium text-white">{review.user.username}</h3>
-                            <p className="text-white/60 text-xs">{review.date}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center">
-                          <Star className="w-4 h-4 text-yellow-400 mr-1" fill="currentColor" />
-                          <span className="text-white">{review.rating}/10</span>
-                        </div>
-                      </div>
-                      <p className="text-white/80 text-sm">
-                        {review.text}
-                      </p>
-                      <div className="flex items-center gap-3 mt-3">
-                        <button className="text-white/50 text-xs hover:text-white transition-colors">
-                          Helpful
-                        </button>
-                        <button className="text-white/50 text-xs hover:text-white transition-colors">
-                          Report
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
-            
-            <div className="glass-card p-6 rounded-xl" id="comments">
-              <h2 className="text-xl font-bold text-white mb-4">Discussion</h2>
-              <CommentsSection 
-                animeId={animeId}
-                comments={animeComments}
-                onAddComment={handleAddComment}
-              />
-            </div>
-          </TabsContent>
-        </Tabs>
-      </div>
-      
-      {similarAnime && similarAnime.length > 0 && (
-        <CategoryRow 
-          title="Similar Anime" 
-          animeList={similarAnime}
-        />
-      )}
-
-      {isTrailerModalOpen && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
-          <div className="absolute top-4 right-4">
-            <Button 
-              variant="ghost" 
-              className="text-white bg-white/10 hover:bg-white/20"
-              onClick={closeTrailerModal}
-            >
-              Close
-            </Button>
-          </div>
-          <div className="w-full max-w-4xl aspect-video">
-            <iframe
-              src={`https://www.youtube.com/embed/${getTrailerId()}?autoplay=1`}
-              title="YouTube video player"
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="w-full h-full"
-            ></iframe>
           </div>
         </div>
-      )}
+      </section>
+
+      <main className="container mx-auto px-4 py-8 md:px-6">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0">
+            <Tabs defaultValue="overview">
+              <TabsList className="bg-white/5">
+                <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="episodes">Episodes</TabsTrigger>
+                <TabsTrigger value="characters">Characters</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="overview" className="mt-6 space-y-6">
+                {anime.description && (
+                  <p className="whitespace-pre-line text-sm leading-relaxed text-white/80">
+                    {anime.description}
+                  </p>
+                )}
+                <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                  {anime.genres && anime.genres.length > 0 && (
+                    <div>
+                      <dt className="text-white/50">Genres</dt>
+                      <dd className="text-white/90">{anime.genres.join(', ')}</dd>
+                    </div>
+                  )}
+                  {anime.studios && anime.studios.length > 0 && (
+                    <div>
+                      <dt className="text-white/50">Studio</dt>
+                      <dd className="text-white/90">{anime.studios.join(', ')}</dd>
+                    </div>
+                  )}
+                  {anime.aired && (
+                    <div>
+                      <dt className="text-white/50">Aired</dt>
+                      <dd className="text-white/90">{anime.aired}</dd>
+                    </div>
+                  )}
+                  {anime.type && (
+                    <div>
+                      <dt className="text-white/50">Type</dt>
+                      <dd className="text-white/90">{anime.type}</dd>
+                    </div>
+                  )}
+                </dl>
+              </TabsContent>
+
+              <TabsContent value="episodes" className="mt-6">
+                {episodes.length === 0 ? (
+                  <p className="text-sm text-white/60">No episodes listed yet.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                    {episodes.map((episode) => (
+                      <Button
+                        key={episode.key}
+                        variant="secondary"
+                        className="justify-start"
+                        onClick={() => navigate(`/anime/${id}/watch?ep=${episode.number}`)}
+                      >
+                        {episode.number}. {episode.title.replace(/^Episode \d+$/, '').trim() || 'Episode'}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="characters" className="mt-6">
+                {characters.length === 0 ? (
+                  <p className="text-sm text-white/60">No character data available.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+                    {characters.map((character) => (
+                      <div key={character.id} className="flex items-center gap-3">
+                        <Avatar className="h-12 w-12">
+                          <AvatarImage src={character.image} alt={character.name} />
+                          <AvatarFallback>{character.name.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-white">{character.name}</p>
+                          <p className="text-xs text-white/50">{character.role}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
+
+          <aside className="space-y-5">
+            <DownloadPanel />
+            {reviews.length > 0 && (
+              <section className="rounded-lg border border-white/10 bg-white/5 p-4">
+                <h2 className="mb-3 text-sm font-semibold text-white">Reviews</h2>
+                <p className="text-xs text-white/60">{reviews.length} reviews</p>
+              </section>
+            )}
+          </aside>
+        </div>
+
+        {similar.length > 0 && (
+          <div className="mt-10">
+            <CategoryRow title="You might also like" animeList={asCardList(similar)} />
+          </div>
+        )}
+      </main>
     </div>
   );
 };

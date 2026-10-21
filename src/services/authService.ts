@@ -19,18 +19,18 @@ export interface UserData {
   avatar?: string;
   createdAt: Date;
   watchlist: Array<{
-    animeId: number;
+    animeId: string;
     addedAt: Date;
   }>;
   history: Array<{
-    animeId: number;
+    animeId: string;
     episodeId: number;
     progress: number;
     timestamp: number; // Timestamp in seconds for video playback position
     lastWatched: Date; // Date when the episode was last watched
   }>;
   favorites: Array<{
-    animeId: number;
+    animeId: string;
     addedAt: Date;
   }>;
 }
@@ -157,7 +157,7 @@ export const getCurrentUserData = (): UserData | null => {
   };
 };
 
-export const addToWatchlist = async (userId: string, animeId: number): Promise<Array<{animeId: number, addedAt: Date}>> => {
+export const addToWatchlist = async (userId: string, animeId: string): Promise<Array<{animeId: string, addedAt: Date}>> => {
   try {
     const user = await findUserById(userId);
     
@@ -186,11 +186,11 @@ export const addToWatchlist = async (userId: string, animeId: number): Promise<A
 
 export const updateWatchHistory = async (
   userId: string, 
-  animeId: number, 
+  animeId: string, 
   episodeId: number, 
   progress: number,
   timestamp: number = 0
-): Promise<Array<{animeId: number, episodeId: number, progress: number, timestamp: number, lastWatched: Date}>> => {
+): Promise<Array<{animeId: string, episodeId: number, progress: number, timestamp: number, lastWatched: Date}>> => {
   try {
     const user = await findUserById(userId);
     
@@ -254,7 +254,7 @@ export const updateWatchHistory = async (
   }
 };
 
-export const removeFromWatchHistory = async (userId: string, animeId: number): Promise<Array<{animeId: number, episodeId: number, progress: number, timestamp: number, lastWatched: Date}>> => {
+export const removeFromWatchHistory = async (userId: string, animeId: string): Promise<Array<{animeId: string, episodeId: number, progress: number, timestamp: number, lastWatched: Date}>> => {
   try {
     const user = await findUserById(userId);
     
@@ -287,7 +287,7 @@ export const removeFromWatchHistory = async (userId: string, animeId: number): P
   }
 };
 
-export const toggleFavorite = async (userId: string, animeId: number): Promise<Array<{animeId: number, addedAt: Date}>> => {
+export const toggleFavorite = async (userId: string, animeId: string): Promise<Array<{animeId: string, addedAt: Date}>> => {
   try {
     const user = await findUserById(userId);
     
@@ -295,7 +295,7 @@ export const toggleFavorite = async (userId: string, animeId: number): Promise<A
       throw new Error('User not found');
     }
     
-    let updatedFavorites = [...user.favorites];
+    const updatedFavorites = [...user.favorites];
     
     const existingIndex = updatedFavorites.findIndex(item => item.animeId === animeId);
     

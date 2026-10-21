@@ -8,8 +8,7 @@ import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
-import { useQuery } from '@tanstack/react-query';
-import { fetchGenres } from '../services/anilistService';
+import { useGenres } from '../hooks/useAnimeData';
 
 // Generate years for dropdown (current year down to 1990)
 const years = Array.from({ length: new Date().getFullYear() - 1989 }, (_, i) => (new Date().getFullYear() - i).toString());
@@ -39,11 +38,7 @@ export const SearchFilters = ({ onSearch }: SearchFiltersProps) => {
   });
 
   // Fetch genres from the API
-  const { data: genreList = [] } = useQuery({
-    queryKey: ['genres'],
-    queryFn: fetchGenres,
-    staleTime: 24 * 60 * 60 * 1000, // 24 hours cache
-  });
+  const { data: genreList = [] } = useGenres();
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();

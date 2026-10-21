@@ -13,7 +13,7 @@ import {
   ArrowLeft,
   AlertTriangle
 } from 'lucide-react';
-import { getUserData, updateUserProfile, updateUserPassword } from '@/services/authService';
+import { getUserData, updateUserProfile, updateUserPassword, UserData } from '@/services/authService';
 import { 
   Card, 
   CardContent, 
@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/alert";
 
 const Settings = () => {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<UserData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const navigate = useNavigate();
@@ -146,13 +146,18 @@ const Settings = () => {
         title: "Password Updated",
         description: "Your password has been changed successfully",
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error("Failed to update password:", error);
-      setPasswordError(error.message || 'Invalid current password');
+      setPasswordError(
+        error instanceof Error ? error.message : 'Invalid current password'
+      );
       
       toast({
         title: "Password Update Failed",
-        description: error.message || "Failed to update password. Please try again.",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to update password. Please try again.",
         variant: "destructive",
       });
     } finally {

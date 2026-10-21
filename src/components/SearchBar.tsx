@@ -2,8 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, X } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { anilistService } from '../services/anilistService';
+import { useAnimeSuggestions } from '../hooks/useAnimeData';
 
 const SearchBar = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -27,17 +26,7 @@ const SearchBar = () => {
     return () => clearTimeout(timerId);
   }, [searchQuery]);
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['quickSearch', debouncedQuery],
-    queryFn: async () => {
-      const result = await anilistService.getSuggestions(debouncedQuery, 8);
-      return result;
-    },
-    enabled: debouncedQuery.length >= 2,
-    staleTime: 1000 * 60 * 5,
-  });
-
-  const searchResults = data || [];
+  const { data: searchResults = [], isLoading } = useAnimeSuggestions(debouncedQuery, 8);
 
   const handleClear = () => {
     setSearchQuery('');
@@ -50,7 +39,7 @@ const SearchBar = () => {
     setSearchQuery('');
   };
 
-  const handleResultClick = (animeId: number) => {
+  const handleResultClick = (animeId: string) => {
     navigate(`/anime/${animeId}`);
     setIsFocused(false);
     setSearchQuery('');
@@ -112,7 +101,7 @@ const SearchBar = () => {
             {isLoading ? (
               <div className="text-center py-2 text-white/60 text-sm">Searching...</div>
             ) : searchResults.length > 0 ? (
-              searchResults.slice(0, 5).map((anime: any) => (
+              searchResults.slice(0, 5).map((anime) => (
                 <div
                   key={anime.id}
                   className="flex items-center space-x-3 p-2 hover:bg-white/5 rounded-md transition-colors cursor-pointer"

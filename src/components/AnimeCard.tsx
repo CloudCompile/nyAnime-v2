@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
 
 interface AnimeCardProps {
-  id: number;
+  id: string;
   title: string;
   image: string;
   category: string;

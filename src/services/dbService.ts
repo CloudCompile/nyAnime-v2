@@ -10,18 +10,18 @@ export interface IUser {
   avatar?: string;
   createdAt: Date;
   watchlist: Array<{
-    animeId: number;
+    animeId: string;
     addedAt: Date;
   }>;
   history: Array<{
-    animeId: number;
+    animeId: string;
     episodeId: number;
     progress: number;
     timestamp: number; // Changed from Date to number for playback position in seconds
     lastWatched: Date; // Added for the time when the episode was last watched
   }>;
   favorites: Array<{
-    animeId: number;
+    animeId: string;
     addedAt: Date;
   }>;
 }
@@ -215,21 +215,21 @@ export const getCurrentUser = (): Omit<IUser, 'password'> | null => {
   if (!userJson) return null;
   
   try {
-    const user = JSON.parse(userJson);
+    const user = JSON.parse(userJson) as IUser;
     // Convert date strings back to Date objects
     return {
       ...user,
       createdAt: new Date(user.createdAt),
-      watchlist: user.watchlist.map((item: any) => ({
+      watchlist: user.watchlist.map((item) => ({
         ...item,
         addedAt: new Date(item.addedAt)
       })),
-      history: user.history.map((item: any) => ({
+      history: user.history.map((item) => ({
         ...item,
         // Keep timestamp as number for playback position
         lastWatched: new Date(item.lastWatched)
       })),
-      favorites: user.favorites.map((item: any) => ({
+      favorites: user.favorites.map((item) => ({
         ...item,
         addedAt: new Date(item.addedAt)
       }))

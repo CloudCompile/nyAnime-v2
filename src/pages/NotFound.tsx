@@ -24,7 +24,7 @@ const NotFound = () => {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen bg-anime-darker bg-[url('/404-bg.svg')] bg-repeat bg-cover">
+    <div className="min-h-screen bg-anime-darker">
       <Header />
       
       <div className="container mx-auto px-4 min-h-[calc(100vh-80px)] flex items-center justify-center">
