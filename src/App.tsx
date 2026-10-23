@@ -13,6 +13,7 @@ import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import AnimeList from "./pages/AnimeList";
 import NetworkStatus from "./components/NetworkStatus";
+import { LiquidGlassDefs } from "./components/ui/liquid-glass";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,6 +29,7 @@ const queryClient = new QueryClient({
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
+      <LiquidGlassDefs />
       <Toaster />
       <Sonner />
       <NetworkStatus />

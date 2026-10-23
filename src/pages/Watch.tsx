@@ -29,6 +29,7 @@ import {
 import { useDownloads } from '../hooks/useDownloads';
 import { resolveSlug } from '../hooks/useAnimeData';
 import { rememberSlug } from '../lib/animeIds';
+import { loadSubtitleDelay, saveSubtitleDelay } from '../lib/subtitles';
 import { getCurrentUserData, updateWatchHistory } from '../services/authService';
 
 const Watch = () => {
@@ -160,6 +161,11 @@ const Watch = () => {
     [anime, episodeNumber],
   );
 
+  const handleSubtitleDelayChange = useCallback(
+    (seconds: number) => saveSubtitleDelay(anime?.dataId ?? id, seconds),
+    [anime, id],
+  );
+
   const downloadEpisodes = (list: EpisodeSummary[]) => {
     if (!anime || list.length === 0) return;
     const added = enqueue(anime.title, list);
@@ -258,6 +264,7 @@ const Watch = () => {
               </div>
             ) : stream?.file ? (
               <HlsPlayer
+                key={id}
                 src={stream.file}
                 poster={anime?.poster}
                 autoPlay
@@ -266,6 +273,8 @@ const Watch = () => {
                 subtitles={stream.tracks}
                 intro={stream.intro}
                 outro={stream.outro}
+                initialSubtitleDelay={loadSubtitleDelay(anime?.dataId ?? id)}
+                onSubtitleDelayChange={handleSubtitleDelayChange}
               />
             ) : (
               <div className="flex aspect-video w-full items-center justify-center rounded-xl bg-black">

@@ -1,8 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Hls, { type Level } from 'hls.js';
-import { Loader2, Maximize, Pause, Play, SkipForward, Volume2, VolumeX } from 'lucide-react';
+import {
+  Captions,
+  Loader2,
+  Maximize,
+  Minimize,
+  Pause,
+  Play,
+  Rewind,
+  SkipForward,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import type { SubtitleTrack } from '../services/animeApiService';
 import { maybeProxy } from '../lib/stream';
+import { looksLikeVtt, shiftVtt } from '../lib/subtitles';
 
 export interface HlsPlayerProps {
   /** Master playlist URL. CDN links are proxied automatically. */
@@ -19,9 +31,15 @@ export interface HlsPlayerProps {
   /** Intro/outro windows in seconds, when the source advertises them. */
   intro?: number[];
   outro?: number[];
+  /** Subtitle delay persisted for this series, in seconds. */
+  initialSubtitleDelay?: number;
+  /** Called when the viewer changes the subtitle delay. */
+  onSubtitleDelayChange?: (seconds: number) => void;
 }
 
 const PROGRESS_REPORT_INTERVAL_MS = 5000;
+const CONTROLS_HIDE_DELAY_MS = 2800;
+const DELAY_STEP_SECONDS = 0.25;
 
 const formatTime = (seconds: number): string => {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -35,9 +53,14 @@ const formatTime = (seconds: number): string => {
 
 /**
  * A deliberately small HLS player: one `<video>` element, hls.js when the
- * browser needs it, and plain controls. No skins, no animation library, no
- * blur effects — the UI stays cheap to render so it also behaves on the Intel
- * integrated graphics of an older laptop.
+ * browser needs it, and plain controls. No skins and no animation library —
+ * the UI stays cheap to render so it also behaves on the Intel integrated
+ * graphics of an older laptop.
+ *
+ * Subtitles are loaded by the player rather than handed to the `<video>` as a
+ * `<track>` element, because scraped cue files are authored against a
+ * different encode than the one being streamed and need a fixed retiming
+ * offset. The file is fetched once, shifted, and re-emitted as a blob URL.
  */
 const HlsPlayer: React.FC<HlsPlayerProps> = ({
   src,
@@ -49,12 +72,16 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
   subtitles = [],
   intro = [],
   outro = [],
+  initialSubtitleDelay = 0,
+  onSubtitleDelayChange,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const lastReportRef = useRef(0);
   const appliedProgressRef = useRef(false);
+  const hideTimerRef = useRef<number | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +91,12 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
   const [duration, setDuration] = useState(0);
   const [levels, setLevels] = useState<{ height: number; index: number }[]>([]);
   const [activeLevel, setActiveLevel] = useState(-1);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
+  const [activeSubtitle, setActiveSubtitle] = useState(0);
+  const [subtitleDelay, setSubtitleDelay] = useState(initialSubtitleDelay);
+  const [rawVtt, setRawVtt] = useState<string | null>(null);
 
   const playableSrc = useMemo(() => maybeProxy(src), [src]);
 
@@ -74,11 +107,11 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
         .map((track, index) => ({
           url: maybeProxy(track.file),
           label: track.label || `Track ${index + 1}`,
-          isDefault: Boolean(track.default) || index === 0,
         })),
     [subtitles],
   );
 
+  // --- media source -------------------------------------------------------
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !playableSrc) return;
@@ -86,12 +119,6 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
     setIsLoading(true);
     setError(null);
     appliedProgressRef.current = false;
-
-    const attachNative = () => {
-      // Safari plays HLS natively, but the proxied manifest is still needed for
-      // CORS, so the same URL is used either way.
-      video.src = playableSrc;
-    };
 
     if (Hls.isSupported()) {
       const hls = new Hls({
@@ -134,7 +161,9 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
         hlsRef.current = null;
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      attachNative();
+      // Safari plays HLS natively, but the proxied manifest is still needed for
+      // CORS, so the same URL is used either way.
+      video.src = playableSrc;
     } else {
       setError('This browser cannot play HLS video.');
       setIsLoading(false);
@@ -148,23 +177,169 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
     };
   }, [playableSrc, autoPlay]);
 
-  // Attach subtitle tracks as WebVTT once the manifest is known.
+  // --- subtitles ----------------------------------------------------------
+  // Fetch the raw cue file whenever the track changes, and switch subtitles on
+  // as soon as a usable one arrives: a viewer who opened the player to read
+  // subtitles should not have to find the toggle first.
+  useEffect(() => {
+    const track = subtitleTracks[activeSubtitle];
+    if (!track) {
+      setRawVtt(null);
+      return;
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+    setRawVtt(null);
+
+    (async () => {
+      try {
+        const response = await fetch(track.url, { signal: controller.signal });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const text = await response.text();
+        if (cancelled) return;
+        if (!looksLikeVtt(text)) throw new Error('not WebVTT');
+        setRawVtt(text);
+        setSubtitlesEnabled(true);
+      } catch {
+        if (cancelled) return;
+        setRawVtt(null);
+        setSubtitlesEnabled(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [subtitleTracks, activeSubtitle]);
+
+  // Re-emit the shifted file whenever the delay changes.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    for (const track of subtitleTracks) {
-      const element = document.createElement('track');
-      element.kind = 'subtitles';
-      element.label = track.label;
-      element.src = track.url;
-      element.default = track.isDefault;
-      video.appendChild(element);
-    }
-    return () => {
-      video.querySelectorAll('track').forEach((track) => track.remove());
-    };
-  }, [subtitleTracks]);
 
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+    if (!rawVtt || !subtitlesEnabled) return;
+
+    const blobUrl = URL.createObjectURL(
+      new Blob([shiftVtt(rawVtt, subtitleDelay)], { type: 'text/vtt' }),
+    );
+    blobUrlRef.current = blobUrl;
+
+    const element = document.createElement('track');
+    element.kind = 'subtitles';
+    element.label = subtitleTracks[activeSubtitle]?.label ?? 'Subtitles';
+    element.src = blobUrl;
+    element.default = true;
+    video.appendChild(element);
+    const native = video.textTracks[video.textTracks.length - 1];
+    if (native) native.mode = 'showing';
+
+    return () => {
+      element.remove();
+    };
+  }, [rawVtt, subtitleDelay, subtitlesEnabled, subtitleTracks, activeSubtitle]);
+
+  // Blob URLs are process-wide; release the last one on unmount.
+  useEffect(
+    () => () => {
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    },
+    [],
+  );
+
+  // --- controls visibility ------------------------------------------------
+  const hideControls = useCallback(() => {
+    const video = videoRef.current;
+    // Keep the bar up while paused: hiding it would leave no way to resume
+    // without a stray click, which reads as a frozen player.
+    if (video && !video.paused) setControlsVisible(false);
+  }, []);
+
+  const bumpControls = useCallback(() => {
+    setControlsVisible(true);
+    if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = window.setTimeout(hideControls, CONTROLS_HIDE_DELAY_MS);
+  }, [hideControls]);
+
+  const toggleFullscreen = useCallback(async () => {
+    const container = containerRef.current;
+    if (!container) return;
+    if (document.fullscreenElement) await document.exitFullscreen().catch(() => undefined);
+    else await container.requestFullscreen().catch(() => undefined);
+    bumpControls();
+  }, [bumpControls]);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+      bumpControls();
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, [bumpControls]);
+
+  // Any interaction reveals the bar; the timer is only armed while playing, so
+  // a paused player never hides it.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const reveal = () => bumpControls();
+    const events: (keyof HTMLElementEventMap)[] = ['mousemove', 'pointerdown', 'touchstart'];
+    events.forEach((event) => video.addEventListener(event, reveal));
+    video.addEventListener('keydown', reveal);
+    return () => {
+      events.forEach((event) => video.removeEventListener(event, reveal));
+      video.removeEventListener('keydown', reveal);
+      if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+    };
+  }, [bumpControls]);
+
+  useEffect(() => {
+    if (!isPlaying) {
+      if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+      setControlsVisible(true);
+      return;
+    }
+    bumpControls();
+  }, [isPlaying, bumpControls]);
+
+  // Keyboard: space/enter toggles playback, arrows seek, and the usual
+  // fullscreen keys work inside the container.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const video = videoRef.current;
+      if (!video) return;
+      if (event.key === ' ' || event.key === 'k') {
+        event.preventDefault();
+        if (video.paused) void video.play().catch(() => undefined);
+        else video.pause();
+      } else if (event.key === 'ArrowRight') {
+        video.currentTime = Math.min(video.duration || 0, video.currentTime + 5);
+      } else if (event.key === 'ArrowLeft') {
+        video.currentTime = Math.max(0, video.currentTime - 5);
+      } else if (event.key === 'm') {
+        video.muted = !video.muted;
+        setIsMuted(video.muted);
+      } else if (event.key === 'f') {
+        void toggleFullscreen();
+      } else if (event.key === 'c') {
+        setSubtitlesEnabled((value) => !value);
+      } else {
+        return;
+      }
+      bumpControls();
+    };
+    container.addEventListener('keydown', onKeyDown);
+    return () => container.removeEventListener('keydown', onKeyDown);
+  }, [bumpControls, toggleFullscreen]);
+
+  // --- handlers -----------------------------------------------------------
   const handleLoadedMetadata = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -193,28 +368,48 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
     if (!video) return;
     if (video.paused) void video.play().catch(() => undefined);
     else video.pause();
-  }, []);
+    bumpControls();
+  }, [bumpControls]);
 
   const toggleMute = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
     video.muted = !video.muted;
     setIsMuted(video.muted);
-  }, []);
+    bumpControls();
+  }, [bumpControls]);
 
-  const seekTo = useCallback((seconds: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.currentTime = seconds;
-    setCurrentTime(seconds);
-  }, []);
+  const seekTo = useCallback(
+    (seconds: number) => {
+      const video = videoRef.current;
+      if (!video) return;
+      video.currentTime = seconds;
+      setCurrentTime(seconds);
+      bumpControls();
+    },
+    [bumpControls],
+  );
 
-  const requestFullscreen = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void container.requestFullscreen().catch(() => undefined);
-  }, []);
+  const skip = useCallback(
+    (delta: number) => {
+      const video = videoRef.current;
+      if (!video) return;
+      video.currentTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + delta));
+      bumpControls();
+    },
+    [bumpControls],
+  );
+
+  const nudgeDelay = useCallback(
+    (delta: number) => {
+      setSubtitleDelay((value) => {
+        const next = Math.round((value + delta) * 100) / 100;
+        onSubtitleDelayChange?.(next);
+        return next;
+      });
+    },
+    [onSubtitleDelayChange],
+  );
 
   const handleScrub = (event: React.ChangeEvent<HTMLInputElement>) => {
     seekTo(Number(event.target.value));
@@ -228,6 +423,7 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
     : false;
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const showBar = controlsVisible || !isPlaying;
 
   if (error) {
     return (
@@ -238,13 +434,20 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
   }
 
   return (
-    <div ref={containerRef} className="relative w-full aspect-video bg-black rounded-xl overflow-hidden group">
+    <div
+      ref={containerRef}
+      tabIndex={0}
+      className={`group/player relative w-full aspect-video overflow-hidden rounded-xl bg-black outline-none ${
+        showBar ? '' : 'cursor-none'
+      }`}
+    >
       <video
         ref={videoRef}
         poster={poster}
         className="w-full h-full"
         playsInline
         onClick={togglePlay}
+        onDoubleClick={toggleFullscreen}
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
         onDurationChange={handleLoadedMetadata}
@@ -256,14 +459,14 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
       />
 
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40">
           <Loader2 className="h-8 w-8 animate-spin text-white" />
         </div>
       )}
 
       {inIntro && introWindow && (
         <button
-          className="absolute bottom-20 right-4 rounded-md bg-white/90 px-4 py-2 text-sm font-medium text-black hover:bg-white"
+          className="absolute bottom-24 right-4 rounded-md bg-white/90 px-4 py-2 text-sm font-medium text-black hover:bg-white"
           onClick={() => seekTo(introWindow[1] ?? currentTime)}
         >
           <SkipForward className="mr-1 inline h-4 w-4" />
@@ -271,8 +474,17 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
         </button>
       )}
 
-      {/* Controls */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent px-3 pb-2 pt-8">
+      {/* Controls. The wrapper carries the visibility so the bar and the
+          gradient fade together and stop capturing clicks once hidden. */}
+      <div
+        className={`absolute inset-x-0 bottom-0 px-3 pb-2 pt-10 transition-opacity duration-300 ${
+          showBar ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        style={{
+          background:
+            'linear-gradient(to top, hsl(240 23% 9% / 0.92) 0%, hsl(240 23% 9% / 0.55) 45%, transparent 100%)',
+        }}
+      >
         <input
           type="range"
           min={0}
@@ -281,14 +493,15 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
           value={currentTime}
           onChange={handleScrub}
           aria-label="Seek"
-          className="w-full h-1 cursor-pointer appearance-none rounded bg-white/25 accent-white"
-          style={{
-            background: `linear-gradient(to right, #8b5cf6 ${progressPercent}%, rgba(255,255,255,0.25) ${progressPercent}%)`,
-          }}
+          className="player-scrub w-full cursor-pointer appearance-none"
+          style={{ '--progress': `${progressPercent}%` } as React.CSSProperties}
         />
-        <div className="mt-1 flex items-center gap-3 text-white">
+        <div className="mt-2 flex items-center gap-3 text-white">
           <button onClick={togglePlay} aria-label={isPlaying ? 'Pause' : 'Play'}>
             {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+          </button>
+          <button onClick={() => skip(-10)} aria-label="Rewind 10 seconds">
+            <Rewind className="h-5 w-5" />
           </button>
           <button onClick={toggleMute} aria-label={isMuted ? 'Unmute' : 'Mute'}>
             {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
@@ -297,6 +510,41 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
           <div className="flex-1" />
+
+          {subtitleTracks.length > 0 && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setSubtitlesEnabled((value) => !value)}
+                aria-label={subtitlesEnabled ? 'Hide subtitles' : 'Show subtitles'}
+                className={subtitlesEnabled ? 'text-anime-purple' : 'text-white/70 hover:text-white'}
+              >
+                <Captions className="h-5 w-5" />
+              </button>
+              {subtitlesEnabled && (
+                <div className="flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-xs tabular-nums">
+                  <button
+                    onClick={() => nudgeDelay(-DELAY_STEP_SECONDS)}
+                    aria-label="Subtitles earlier"
+                    className="px-1 hover:text-anime-purple"
+                  >
+                    −
+                  </button>
+                  <span className="w-12 text-center">
+                    {subtitleDelay > 0 ? '+' : ''}
+                    {subtitleDelay.toFixed(2)}s
+                  </span>
+                  <button
+                    onClick={() => nudgeDelay(DELAY_STEP_SECONDS)}
+                    aria-label="Subtitles later"
+                    className="px-1 hover:text-anime-purple"
+                  >
+                    +
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {levels.length > 1 && (
             <select
               value={activeLevel}
@@ -316,8 +564,9 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
               ))}
             </select>
           )}
-          <button onClick={requestFullscreen} aria-label="Fullscreen">
-            <Maximize className="h-5 w-5" />
+
+          <button onClick={toggleFullscreen} aria-label="Fullscreen">
+            {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
           </button>
         </div>
       </div>
