@@ -84,7 +84,7 @@ const NotFound = () => {
                   {suggestedAnime.map((anime) => (
                     <div 
                       key={anime.id} 
-                      className="bg-white/5 rounded-lg overflow-hidden cursor-pointer hover:bg-white/10 transition-colors"
+                      className="glass-card overflow-hidden cursor-pointer transition-colors"
                       onClick={() => navigate(`/anime/${anime.id}`)}
                     >
                       <div className="w-full aspect-[3/4] relative">

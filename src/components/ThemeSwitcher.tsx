@@ -50,7 +50,7 @@ const ThemeSwitcher = () => {
           <span className="sr-only">Toggle theme</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="bg-anime-gray border-white/10">
+      <DropdownMenuContent align="end" className="border-white/10">
         <DropdownMenuItem 
           onClick={() => handleThemeChange('light')}
           className="text-white hover:bg-white/10 cursor-pointer"

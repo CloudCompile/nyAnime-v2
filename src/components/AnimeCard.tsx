@@ -93,6 +93,9 @@ const AnimeCard = ({
       
       {/* Overlay */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-100" />
+
+      {/* Liquid Glass surface over the poster */}
+      <div aria-hidden="true" className="glass-surface absolute inset-0 pointer-events-none" />
       
       {/* Content */}
       <div className="absolute inset-0 flex flex-col justify-end p-3 md:p-4">

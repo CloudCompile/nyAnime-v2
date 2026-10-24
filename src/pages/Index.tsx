@@ -133,7 +133,7 @@ const Index = () => {
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <div className="mb-5 flex items-center justify-between">
                 <h2 className="text-2xl font-bold text-white">Browse</h2>
-                <TabsList className="bg-white/5">
+                <TabsList>
                   <TabsTrigger value="trending">Trending</TabsTrigger>
                   <TabsTrigger value="popular">Popular</TabsTrigger>
                 </TabsList>

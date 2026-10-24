@@ -26,3 +26,6 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Agent-local working memory (not part of the project)
+.openhands/

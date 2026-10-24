@@ -75,13 +75,13 @@ export const SearchFilters = ({ onSearch }: SearchFiltersProps) => {
             placeholder="Search anime..."
             value={filters.query}
             onChange={(e) => setFilters({ ...filters, query: e.target.value })}
-            className="pl-9 bg-anime-gray/50 border-white/10 text-white"
+            className="pl-9 border-white/10 text-white"
           />
         </div>
         
         <Popover open={isOpen} onOpenChange={setIsOpen}>
           <PopoverTrigger asChild>
-            <Button variant="outline" className="bg-anime-gray/50 border-white/10 text-white hover:bg-white/10">
+            <Button variant="outline" className="border-white/10 text-white hover:bg-white/10">
               <Filter className="h-4 w-4 mr-2" />
               Filters {filters.genres.length > 0 || filters.year || filters.status || filters.rating[0] > 0 || filters.rating[1] < 10 ? 
                 <span className="ml-1 w-5 h-5 rounded-full bg-anime-purple text-white text-xs flex items-center justify-center">
@@ -90,7 +90,7 @@ export const SearchFilters = ({ onSearch }: SearchFiltersProps) => {
               }
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-80 md:w-96 bg-anime-gray border-white/10 text-white p-4">
+          <PopoverContent className="w-80 md:w-96 border-white/10 text-white p-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-medium">Filter Anime</h3>
               <Button 
@@ -134,10 +134,10 @@ export const SearchFilters = ({ onSearch }: SearchFiltersProps) => {
                     value={filters.year || undefined} 
                     onValueChange={(value) => setFilters({ ...filters, year: value })}
                   >
-                    <SelectTrigger className="bg-anime-dark border-white/10 text-white">
+                    <SelectTrigger className="border-white/10 text-white">
                       <SelectValue placeholder="Any Year" />
                     </SelectTrigger>
-                    <SelectContent className="bg-anime-dark border-white/10 text-white">
+                    <SelectContent className="border-white/10 text-white">
                       <SelectItem value="">Any Year</SelectItem>
                       {years.map(year => (
                         <SelectItem key={year} value={year}>{year}</SelectItem>
@@ -152,10 +152,10 @@ export const SearchFilters = ({ onSearch }: SearchFiltersProps) => {
                     value={filters.status || undefined} 
                     onValueChange={(value) => setFilters({ ...filters, status: value })}
                   >
-                    <SelectTrigger className="bg-anime-dark border-white/10 text-white">
+                    <SelectTrigger className="border-white/10 text-white">
                       <SelectValue placeholder="Any Status" />
                     </SelectTrigger>
-                    <SelectContent className="bg-anime-dark border-white/10 text-white">
+                    <SelectContent className="border-white/10 text-white">
                       <SelectItem value="">Any Status</SelectItem>
                       {statuses.map(status => (
                         <SelectItem key={status} value={status}>{status}</SelectItem>

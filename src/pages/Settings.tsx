@@ -206,7 +206,7 @@ const Settings = () => {
           </TabsList>
           
           <TabsContent value="profile" className="mt-0">
-            <Card className="glass-card bg-transparent border-white/10">
+            <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="text-white">Profile Information</CardTitle>
                 <CardDescription className="text-white/70">
@@ -216,7 +216,7 @@ const Settings = () => {
               <CardContent className="space-y-6">
                 <div className="flex flex-col items-center mb-6">
                   <div className="relative">
-                    <div className="w-24 h-24 rounded-full bg-anime-gray/50 flex items-center justify-center text-white text-5xl overflow-hidden">
+                    <div className="glass-surface w-24 h-24 rounded-full flex items-center justify-center text-white text-5xl overflow-hidden">
                       {avatarUrl ? (
                         <img src={avatarUrl} alt={username} className="w-full h-full object-cover" />
                       ) : (
@@ -249,7 +249,7 @@ const Settings = () => {
                     id="username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="bg-anime-gray/50 border-white/10 text-white"
+                    className="border-white/10 text-white"
                   />
                 </div>
                 
@@ -261,7 +261,7 @@ const Settings = () => {
                     id="email"
                     value={email}
                     disabled
-                    className="bg-anime-gray/50 border-white/10 text-white opacity-70"
+                    className="border-white/10 text-white opacity-70"
                   />
                   <p className="text-white/50 text-xs">
                     Email address cannot be changed
@@ -282,7 +282,7 @@ const Settings = () => {
           </TabsContent>
           
           <TabsContent value="security" className="mt-0">
-            <Card className="glass-card bg-transparent border-white/10">
+            <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="text-white">Change Password</CardTitle>
                 <CardDescription className="text-white/70">
@@ -307,7 +307,7 @@ const Settings = () => {
                     type="password"
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="bg-anime-gray/50 border-white/10 text-white"
+                    className="border-white/10 text-white"
                   />
                 </div>
                 
@@ -320,7 +320,7 @@ const Settings = () => {
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="bg-anime-gray/50 border-white/10 text-white"
+                    className="border-white/10 text-white"
                   />
                 </div>
                 
@@ -333,7 +333,7 @@ const Settings = () => {
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="bg-anime-gray/50 border-white/10 text-white"
+                    className="border-white/10 text-white"
                   />
                 </div>
               </CardContent>

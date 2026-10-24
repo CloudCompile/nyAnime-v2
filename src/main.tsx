@@ -3,9 +3,14 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
+import './liquid-glass.css'
 import { initializeDbService } from './services/dbService'
 import { Toaster } from '@/components/ui/toaster'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { initGlassEnhancer } from './lib/liquidGlass'
+
+// Every element carrying a glass class gets a live Liquid Glass surface.
+initGlassEnhancer()
 
 // Create a client
 const queryClient = new QueryClient({

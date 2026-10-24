@@ -75,9 +75,9 @@ const Header = () => {
   ];
 
   return (
-    <header 
+    <header
       className={`fixed top-0 left-0 right-0 z-50 transition-colors duration-300 ${
-        isMobile || isScrolled ? 'glass' : 'bg-transparent'
+        isMobile || isScrolled ? 'glass-surface !rounded-none !border-0' : 'bg-transparent'
       }`}
     >
       <div className="container mx-auto px-4 md:px-6">

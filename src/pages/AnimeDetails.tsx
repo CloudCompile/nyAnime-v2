@@ -225,7 +225,7 @@ const AnimeDetails = () => {
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0">
             <Tabs defaultValue="overview">
-              <TabsList className="bg-white/5">
+              <TabsList>
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="episodes">Episodes</TabsTrigger>
                 <TabsTrigger value="characters">Characters</TabsTrigger>
@@ -310,7 +310,7 @@ const AnimeDetails = () => {
           <aside className="space-y-5">
             <DownloadPanel />
             {reviews.length > 0 && (
-              <section className="rounded-lg border border-white/10 bg-white/5 p-4">
+              <section className="glass-card p-4">
                 <h2 className="mb-3 text-sm font-semibold text-white">Reviews</h2>
                 <p className="text-xs text-white/60">{reviews.length} reviews</p>
               </section>

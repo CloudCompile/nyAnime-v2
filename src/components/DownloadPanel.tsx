@@ -24,7 +24,7 @@ const DownloadPanel: React.FC = () => {
   };
 
   return (
-    <section className="rounded-lg border border-white/10 bg-white/5 p-4">
+    <section className="glass-card p-4">
       <header className="mb-3 flex items-center gap-2">
         <Download className="h-4 w-4 text-white" />
         <h2 className="flex-1 text-sm font-semibold text-white">

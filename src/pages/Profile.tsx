@@ -190,7 +190,7 @@ const Profile = () => {
                       id="username"
                       value={editedUsername}
                       onChange={(e) => setEditedUsername(e.target.value)}
-                      className="bg-anime-gray/50 border-white/10 text-white max-w-xs"
+                      className="border-white/10 text-white max-w-xs"
                     />
                   </div>
                   
@@ -252,7 +252,7 @@ const Profile = () => {
         </div>
         
         <Tabs defaultValue="watchlist" className="w-full">
-          <TabsList className="bg-anime-dark h-10 mb-8">
+          <TabsList className="h-10 mb-8">
             <TabsTrigger value="watchlist" className="text-sm">Watchlist</TabsTrigger>
             <TabsTrigger value="history" className="text-sm">Watch History</TabsTrigger>
             <TabsTrigger value="favorites" className="text-sm">Favorites</TabsTrigger>

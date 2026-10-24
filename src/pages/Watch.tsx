@@ -317,7 +317,7 @@ const Watch = () => {
             </div>
 
             {showEpisodeList && episodes.length > 0 && (
-              <div className="mt-4 max-h-80 overflow-y-auto rounded-lg border border-white/10 bg-white/5 p-3">
+              <div className="glass-card mt-4 max-h-80 overflow-y-auto p-3">
                 <div className="grid grid-cols-5 gap-2 sm:grid-cols-8 md:grid-cols-10">
                   {episodes.map((episode) => (
                     <button
@@ -340,7 +340,7 @@ const Watch = () => {
 
           <aside className="space-y-5">
             {/* Servers */}
-            <section className="rounded-lg border border-white/10 bg-white/5 p-4">
+            <section className="glass-card p-4">
               <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
                 <Server className="h-4 w-4" />
                 Servers
@@ -389,7 +389,7 @@ const Watch = () => {
             </section>
 
             {/* Downloads */}
-            <section className="rounded-lg border border-white/10 bg-white/5 p-4">
+            <section className="glass-card p-4">
               <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
                 <Download className="h-4 w-4" />
                 Batch download

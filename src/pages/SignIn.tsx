@@ -83,7 +83,7 @@ const SignIn = () => {
                   placeholder="your@email.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 bg-anime-gray/50 border-white/10 text-white"
+                  className="pl-10 border-white/10 text-white"
                   required
                 />
               </div>
@@ -106,7 +106,7 @@ const SignIn = () => {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 bg-anime-gray/50 border-white/10 text-white"
+                  className="pl-10 border-white/10 text-white"
                   required
                 />
                 <button

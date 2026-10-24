@@ -82,57 +82,38 @@
   }
 }
 
-@layer utilities {
+@layer components {
   /*
-   * Heavy-translucency liquid glass. The surface is almost fully see-through:
-   * a low-alpha fill over a strong backdrop blur, a refraction layer, and an
-   * inset specular rim that reads as a polished edge. The refraction layer is a
-   * pseudo-element so a surface only needs one class.
+   * Host surfaces for the vendored Liquid Glass renderer
+   * (https://github.com/dashersw/liquid-glass-js, wired up in
+   * src/lib/liquidGlass.ts).
+   *
+   * A surface is an ordinary app element the library paints into: its WebGL
+   * canvas is mounted inside it, behind the content, while the element is on
+   * screen. This background is what shows wherever the canvas mask is
+   * transparent, so a surface that is off screen, or waiting for one of the
+   * page's limited WebGL contexts, still reads as glass.
+   *
+   * Sitting in the `components` layer lets a Tailwind background utility
+   * (`bg-primary/70`, `bg-white/5`, ...) still win where a component sets one.
    */
-  .glass {
+  .glass,
+  .glass-card,
+  .glass-surface {
     isolation: isolate;
     background: rgba(255, 255, 255, 0.07);
-    backdrop-filter: blur(28px) saturate(180%);
-    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
     border: 1px solid rgba(255, 255, 255, 0.16);
     box-shadow:
-      inset 1px 1px 0 rgba(255, 255, 255, 0.4),
-      inset 0 0 18px rgba(255, 255, 255, 0.16),
-      0 8px 28px rgba(0, 0, 0, 0.28);
-  }
-
-  .glass::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    backdrop-filter: blur(0px);
-    -webkit-backdrop-filter: blur(0px);
-    filter: url(#lg-dist);
+      inset 1px 1px 0 rgba(255, 255, 255, 0.34),
+      inset 0 0 18px rgba(255, 255, 255, 0.12),
+      0 8px 28px rgba(0, 0, 0, 0.3);
   }
 
   .glass-card {
-    isolation: isolate;
     background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(22px) saturate(170%);
-    -webkit-backdrop-filter: blur(22px) saturate(170%);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    box-shadow:
-      inset 1px 1px 0 rgba(255, 255, 255, 0.32),
-      inset 0 0 16px rgba(255, 255, 255, 0.12),
-      0 8px 24px rgba(0, 0, 0, 0.3);
-  }
-
-  .glass-card::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    backdrop-filter: blur(0px);
-    -webkit-backdrop-filter: blur(0px);
-    filter: url(#lg-dist);
+    border-color: rgba(255, 255, 255, 0.14);
   }
 
   /* Liquid-glass slider, shared by every slider in the app. Only the bar

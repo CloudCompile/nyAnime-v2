@@ -73,7 +73,7 @@ const CommentsSection: React.FC<CommentProps> = ({ animeId, comments, onAddComme
           placeholder={loggedIn ? "Write a comment..." : "Sign in to comment"}
           value={commentText}
           onChange={(e) => setCommentText(e.target.value)}
-          className="w-full p-3 rounded-lg bg-anime-gray/50 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-anime-purple min-h-24"
+          className="glass-surface w-full p-3 rounded-lg border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-anime-purple min-h-24"
           disabled={!loggedIn}
         />
         <div className="flex justify-between items-center mt-2">

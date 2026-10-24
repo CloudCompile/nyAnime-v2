@@ -114,7 +114,7 @@ const AnimeList = () => {
         </div>
 
         {showFilters && (
-          <div className="mb-6 rounded-lg border border-white/10 bg-white/5 p-4">
+          <div className="glass-card mb-6 p-4">
             <SearchFilters onSearch={handleSearch} />
           </div>
         )}
