@@ -10,6 +10,7 @@ import { useHomeData, usePopularAnime, useSeasonalAnime, useTrendingAnime, type 
 import { GridSkeleton } from '../components/LoadingSkeletons';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { GlassSurface } from '@/components/ui/glass-surface';
 
 const asCardList = (items: AnimeData[]) =>
   items.map((item) => ({
@@ -43,7 +44,7 @@ const Hero = ({ spotlight }: { spotlight?: AnimeData }) => {
       />
       <div className="relative z-10 flex h-full flex-col justify-end">
         <div className="container mx-auto px-4 pb-16 md:px-6 md:pb-20">
-          <div className="max-w-3xl">
+          <GlassSurface className="max-w-3xl rounded-2xl p-6">
             <span className="mb-3 inline-block rounded-full bg-anime-purple/20 px-3 py-1 text-xs font-medium text-white">
               Spotlight
             </span>
@@ -69,7 +70,7 @@ const Hero = ({ spotlight }: { spotlight?: AnimeData }) => {
                 </Link>
               </Button>
             </div>
-          </div>
+          </GlassSurface>
         </div>
       </div>
     </section>

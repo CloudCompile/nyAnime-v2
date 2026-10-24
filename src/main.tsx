@@ -7,10 +7,7 @@ import './liquid-glass.css'
 import { initializeDbService } from './services/dbService'
 import { Toaster } from '@/components/ui/toaster'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { initGlassEnhancer } from './lib/liquidGlass'
-
-// Every element carrying a glass class gets a live Liquid Glass surface.
-initGlassEnhancer()
+// Liquid glass is now applied per-surface via <GlassSurface> components.
 
 // Create a client
 const queryClient = new QueryClient({

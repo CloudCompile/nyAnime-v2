@@ -102,40 +102,9 @@
     <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
 
     <!--
-      Liquid Glass JS. The page-sampling dependency is served locally so the
-      glass does not depend on a third-party CDN. container.js/button.js/
-      controls.js are the upstream files, unmodified; src/lib/liquidGlass.ts
-      drives them and pins the configured parameters.
+      Liquid Glass is now provided by @ybouane/liquidglass (imported via npm
+      in src/lib/liquidGlass.ts). No global scripts needed.
     -->
-    <script src="/liquid-glass/vendor/html2canvas.min.js"></script>
-    <script src="/liquid-glass/container.js"></script>
-    <script src="/liquid-glass/button.js"></script>
-    <script src="/liquid-glass/controls.js"></script>
-    <script>
-      // The upstream files declare their classes with `class`, which creates
-      // lexical globals rather than properties on `window`. The app code lives
-      // in modules, so re-expose them explicitly for src/lib/liquidGlass.ts.
-      window.Container = Container;
-      window.Button = Button;
-
-      // The exact Liquid Glass parameter set for the site. `setupShader` reads
-      // `rimIntensity || 0.05`, so the bridge re-applies these after each
-      // shader is built to keep the requested values, including a rim of 0.
-      window.glassControls = {
-        edgeIntensity: 0.009,
-        rimIntensity: 0.0,
-        baseIntensity: 0.011,
-        edgeDistance: 0.05,
-        rimDistance: 0.5,
-        baseDistance: 0.15,
-        cornerBoost: 0.1,
-        rippleEffect: 0.28,
-        blurRadius: 1.0,
-        tintOpacity: 0.29,
-        warp: false,
-        hideButtons: false,
-      };
-    </script>
 
     <script type="module" src="/src/main.tsx"></script>
   </body>

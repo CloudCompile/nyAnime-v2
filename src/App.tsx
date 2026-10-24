@@ -27,18 +27,7 @@ const queryClient = new QueryClient({
   },
 });
 
-/**
- * The vendored renderer refracts one page-wide screenshot that it captures once
- * and caches. On an SPA that screenshot would stay frozen at whatever the app
- * looked like on boot, so each navigation asks the enhancer to re-capture it.
- */
-const GlassRouteSync = () => {
-  const { pathname } = useLocation();
-  useEffect(() => {
-    window.__nyanimeRefreshGlass?.();
-  }, [pathname]);
-  return null;
-};
+// Liquid glass is now applied per-surface via <GlassSurface> components.
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -48,7 +37,6 @@ const App = () => (
       <Sonner />
       <NetworkStatus />
       <BrowserRouter>
-        <GlassRouteSync />
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/anime" element={<AnimeList />} />
