@@ -47,54 +47,77 @@ struct DetailView: View {
     }
 
     private func header(_ detail: AnimeDetail) -> some View {
-        HStack(alignment: .top, spacing: 20) {
-            PosterImage(url: detail.anime.posterURL, width: 180, height: 250)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(detail.anime.title)
-                    .font(.title.weight(.bold))
-                    .lineLimit(3)
-
-                if let japanese = detail.anime.japaneseTitle, !japanese.isEmpty {
-                    Text(japanese).font(.subheadline).foregroundStyle(.secondary)
-                }
-
-                HStack(spacing: 14) {
-                    if let score = detail.score { fact("star.fill", score) }
-                    if let type = detail.type { fact("tv", type) }
-                    if let total = detail.totalEpisodes { fact("number", "\(total) eps") }
-                    if let status = detail.status { fact("circle.fill", status) }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                if let aired = detail.aired {
-                    Text(aired).font(.caption).foregroundStyle(.secondary)
-                }
-                if !detail.studios.isEmpty {
-                    Text("Studio: \(detail.studios.joined(separator: ", "))")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-
-                if let description = detail.anime.description, !description.isEmpty {
-                    Text(description)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(6)
-                }
-
-                if let first = episodes.first {
-                    NavigationLink {
-                        WatchView(anime: detail.anime, episodes: episodes, startEpisode: first)
-                    } label: {
-                        Label("Watch Episode 1", systemImage: "play.fill")
+        ZStack(alignment: .bottomLeading) {
+            if let url = detail.anime.posterURL {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case let .success(image):
+                        image.resizable().scaledToFill()
+                    default:
+                        Color.animeDarker
                     }
-                    .controlSize(.large)
-                    .buttonStyle(.borderedProminent)
                 }
+                .frame(maxWidth: .infinity)
+                .frame(height: 300)
+                .clipped()
+                .overlay(
+                    LinearGradient(
+                        colors: [Color.animeDarker.opacity(0.3), Color.animeDarker],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            } else {
+                Color.animeDarker.frame(height: 300)
             }
-            Spacer(minLength: 0)
+
+            HStack(alignment: .bottom, spacing: 20) {
+                PosterImage(url: detail.anime.posterURL, width: 150, height: 210)
+                    .shadow(color: .black.opacity(0.5), radius: 12, y: 6)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(detail.anime.title)
+                        .font(.title.weight(.bold))
+                        .lineLimit(3)
+                        .foregroundStyle(.white)
+
+                    if let japanese = detail.anime.japaneseTitle, !japanese.isEmpty {
+                        Text(japanese).font(.subheadline).foregroundStyle(.white.opacity(0.7))
+                    }
+
+                    HStack(spacing: 14) {
+                        if let score = detail.score { fact("star.fill", score) }
+                        if let type = detail.type { fact("tv", type) }
+                        if let total = detail.totalEpisodes { fact("number", "\(total) eps") }
+                        if let status = detail.status { fact("circle.fill", status) }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.7))
+
+                    if let description = detail.anime.description, !description.isEmpty {
+                        Text(description)
+                            .font(.callout)
+                            .foregroundStyle(.white.opacity(0.75))
+                            .lineLimit(4)
+                    }
+
+                    if let first = episodes.first {
+                        NavigationLink {
+                            WatchView(anime: detail.anime, episodes: episodes, startEpisode: first)
+                        } label: {
+                            Label("Watch Episode 1", systemImage: "play.fill")
+                        }
+                        .controlSize(.large)
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.animePurple)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(20)
         }
+        .frame(maxWidth: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .padding(.horizontal)
     }
 

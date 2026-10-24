@@ -61,7 +61,7 @@ struct SpotlightCard: View {
                     case let .success(image):
                         image.resizable().scaledToFill()
                     default:
-                        Color(red: 0.05, green: 0.05, blue: 0.08)
+                        Color.animeDarker
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -70,21 +70,21 @@ struct SpotlightCard: View {
                 .overlay(
                     LinearGradient(
                         colors: [
-                            Color(red: 0.05, green: 0.05, blue: 0.08).opacity(0.2),
-                            Color(red: 0.05, green: 0.05, blue: 0.08).opacity(0.95),
+                            Color.animeDarker.opacity(0.2),
+                            Color.animeDarker.opacity(0.95),
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
             } else {
-                Color(red: 0.05, green: 0.05, blue: 0.08).frame(height: 320)
+                Color.animeDarker.frame(height: 320)
             }
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("Spotlight")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color(red: 0.545, green: 0.361, blue: 0.965))
+                    .foregroundStyle(Color.animePurple)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
                     .background(Color.white.opacity(0.08), in: Capsule())
@@ -106,7 +106,7 @@ struct SpotlightCard: View {
                         Label("More Info", systemImage: "info.circle")
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color(red: 0.545, green: 0.361, blue: 0.965))
+                    .tint(Color.animePurple)
                 }
             }
             .padding(20)

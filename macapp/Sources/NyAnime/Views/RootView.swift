@@ -47,6 +47,6 @@ struct RootView: View {
             }
         }
         .navigationTitle("NyAnime")
-        .background(Color(red: 0.051, green: 0.051, blue: 0.082))
+        .background(Color.animeDarker)
     }
 }
