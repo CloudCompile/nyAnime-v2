@@ -201,7 +201,7 @@ const Watch = () => {
     <div className="min-h-screen bg-anime-darker">
       <Header />
 
-      <main className="container mx-auto px-4 py-6">
+      <main className="container mx-auto px-4 pb-6 pt-20 md:px-6">
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <Button variant="ghost" className="text-white/80 hover:text-white" asChild>
             <Link to={`/anime/${id}`}>

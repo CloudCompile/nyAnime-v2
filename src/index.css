@@ -90,7 +90,6 @@
    * pseudo-element so a surface only needs one class.
    */
   .glass {
-    position: relative;
     isolation: isolate;
     background: rgba(255, 255, 255, 0.07);
     backdrop-filter: blur(28px) saturate(180%);
@@ -114,7 +113,6 @@
   }
 
   .glass-card {
-    position: relative;
     isolation: isolate;
     background: rgba(255, 255, 255, 0.05);
     backdrop-filter: blur(22px) saturate(170%);
