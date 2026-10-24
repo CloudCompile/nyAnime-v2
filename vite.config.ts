@@ -5,6 +5,7 @@ import { componentTagger } from "lovable-tagger";
 import { streamProxyPlugin } from "./vite-plugins/streamProxy";
 
 export default defineConfig(({ mode }) => ({
+  base: './',
   server: {
     host: "::",
     port: 8080,
