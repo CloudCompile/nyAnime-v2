@@ -52,11 +52,22 @@ final class PlaybackController: ObservableObject {
         currentTime = startAt
         duration = 0
 
-        // Request headers for AVPlayer. `AVURLAssetHTTPHeaderFieldsKey` is the
-        // documented-for-private-use key; it is the only way to attach headers to
-        // native playback. The CDN serves without them today, so playback works
-        // either way, but this keeps it working if the referer is enforced.
+        // The CDN serves playlists and segments with `Content-Type: image/jpeg`
+        // and no `.m3u8` extension in the path, so AVPlayer cannot sniff that
+        // the master URL is HLS. Declare the MIME type out of band so playback
+        // actually starts instead of failing with "Operation Stopped".
+        // `AVURLAssetHTTPHeaderFieldsKey` is the documented-for-private-use key
+        // for attaching headers; the CDN serves without them today, but they
+        // keep playback working if the referer is enforced.
+        let mimeType: String
+        switch url.pathExtension.lowercased() {
+        case "m3u8", "m3u": mimeType = "application/vnd.apple.mpegurl"
+        case "ts": mimeType = "video/mp2t"
+        case "mp4", "m4v": mimeType = "video/mp4"
+        default: mimeType = "application/vnd.apple.mpegurl"
+        }
         let options: [String: Any] = [
+            "AVURLAssetOutOfBandMIMETypeKey": mimeType,
             "AVURLAssetHTTPHeaderFieldsKey": StreamFetcher.playbackHeaders
         ]
         let asset = AVURLAsset(url: url, options: options)
