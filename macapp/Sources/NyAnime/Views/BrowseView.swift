@@ -166,7 +166,7 @@ struct SearchView: View {
                 }
             }
             .padding(10)
-            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            .background(Color.animeGray, in: RoundedRectangle(cornerRadius: 8))
             .padding()
 
             Divider()
