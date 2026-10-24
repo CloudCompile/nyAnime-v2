@@ -118,7 +118,7 @@ struct OfflinePlayerSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VideoPlayer(player: playback.player)
+            PlayerView(player: playback.player)
                 .frame(minHeight: 380)
 
             HStack {

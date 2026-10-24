@@ -47,42 +47,72 @@ struct HomeView: View {
     }
 }
 
-/// The large hero card at the top of the home screen.
+/// The large hero card at the top of the home screen, styled like the web app's
+/// hero spotlight: poster as a backdrop with a gradient fade and a title block.
 struct SpotlightCard: View {
     let anime: Anime
 
     var body: some View {
-        HStack(alignment: .top, spacing: 18) {
-            PosterImage(url: anime.posterURL, width: 220, height: 300)
+        ZStack(alignment: .bottomLeading) {
+            // Backdrop poster
+            if let url = anime.posterURL {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case let .success(image):
+                        image.resizable().scaledToFill()
+                    default:
+                        Color(red: 0.05, green: 0.05, blue: 0.08)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 320)
+                .clipped()
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.05, green: 0.05, blue: 0.08).opacity(0.2),
+                            Color(red: 0.05, green: 0.05, blue: 0.08).opacity(0.95),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            } else {
+                Color(red: 0.05, green: 0.05, blue: 0.08).frame(height: 320)
+            }
 
             VStack(alignment: .leading, spacing: 10) {
-                Text(anime.title)
-                    .font(.title2.weight(.bold))
-                    .lineLimit(3)
+                Text("Spotlight")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color(red: 0.545, green: 0.361, blue: 0.965))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.08), in: Capsule())
 
-                if let japanese = anime.japaneseTitle, !japanese.isEmpty {
-                    Text(japanese)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                Text(anime.title)
+                    .font(.title.weight(.bold))
+                    .lineLimit(2)
+                    .foregroundStyle(.white)
 
                 if let description = anime.description, !description.isEmpty {
                     Text(description)
                         .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(5)
+                        .foregroundStyle(.white.opacity(0.75))
+                        .lineLimit(3)
                 }
-
-                Spacer(minLength: 0)
 
                 HStack(spacing: 10) {
                     NavigationLink(value: anime.id) {
                         Label("More Info", systemImage: "info.circle")
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color(red: 0.545, green: 0.361, blue: 0.965))
                 }
             }
-            Spacer(minLength: 0)
+            .padding(20)
         }
+        .frame(maxWidth: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .padding(.horizontal)
     }
 }

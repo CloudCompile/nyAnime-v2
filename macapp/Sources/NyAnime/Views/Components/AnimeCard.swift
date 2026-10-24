@@ -49,9 +49,13 @@ struct AnimeCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             PosterImage(url: anime.posterURL, width: width, height: height)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
 
             Text(anime.title)
-                .font(.caption)
+                .font(.caption.weight(.medium))
                 .lineLimit(2, reservesSpace: true)
                 .multilineTextAlignment(.leading)
                 .foregroundStyle(.primary)

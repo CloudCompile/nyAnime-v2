@@ -57,7 +57,7 @@ struct WatchView: View {
                 // AVKit's VideoPlayer drives the same AVPlayer instance the
                 // controller owns, so the toolbar and keyboard shortcuts stay in
                 // sync with it.
-                VideoPlayer(player: playback.player)
+                PlayerView(player: playback.player)
             case .loading:
                 ProgressView().controlSize(.large).tint(.white)
             case .idle:

@@ -11,6 +11,8 @@ struct NyAnimeApp: App {
             RootView()
                 .environmentObject(state)
                 .environmentObject(playback)
+                .preferredColorScheme(.dark)
+                .tint(Color(red: 0.545, green: 0.361, blue: 0.965))
                 // A fixed, modest minimum keeps the layout simple and cheap to
                 // render on integrated graphics.
                 .frame(minWidth: 900, minHeight: 600)
