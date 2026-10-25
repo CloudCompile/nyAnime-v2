@@ -33,6 +33,12 @@ struct RootView: View {
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 150, ideal: 170, max: 200)
+            .scrollContentBackground(.hidden)
+            .background {
+                LiquidGlassBackground(cornerRadius: 0) {
+                    Color.animeDark.opacity(0.35)
+                }
+            }
         } detail: {
             // `navigationDestination(for:)` and `NavigationLink(value:)` need a
             // NavigationStack ancestor; NavigationSplitView does not provide one,

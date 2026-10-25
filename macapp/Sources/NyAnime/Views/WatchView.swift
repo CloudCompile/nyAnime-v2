@@ -166,6 +166,11 @@ struct WatchView: View {
             }
         }
         .padding()
+        .background {
+            LiquidGlassBackground(cornerRadius: 12) {
+                Color.animeGray.opacity(0.35)
+            }
+        }
     }
 
     private var episodeListPopover: some View {

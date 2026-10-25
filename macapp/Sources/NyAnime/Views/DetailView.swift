@@ -133,7 +133,11 @@ struct DetailView: View {
                         .font(.caption)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(Color.secondary.opacity(0.12), in: Capsule())
+                        .background {
+                            LiquidGlassBackground(cornerRadius: 10) {
+                                Capsule().fill(Color.secondary.opacity(0.12))
+                            }
+                        }
                 }
             }
             .padding(.horizontal)

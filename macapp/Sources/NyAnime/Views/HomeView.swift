@@ -87,7 +87,11 @@ struct SpotlightCard: View {
                     .foregroundStyle(Color.animePurple)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(Color.white.opacity(0.08), in: Capsule())
+                    .background {
+                        LiquidGlassBackground(cornerRadius: 10) {
+                            Capsule().fill(Color.white.opacity(0.08))
+                        }
+                    }
 
                 Text(anime.title)
                     .font(.title.weight(.bold))

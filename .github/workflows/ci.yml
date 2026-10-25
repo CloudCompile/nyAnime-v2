@@ -109,6 +109,26 @@ jobs:
           swift test
           swift build -c release --arch x86_64 --arch arm64
 
+      # The shader is compiled at runtime from a Swift string, so a Metal syntax
+      # error would otherwise only show up as a blank window. Compile it here to
+      # fail the build instead. The string is extracted from the Swift source, so
+      # this checks the exact text the app ships.
+      - name: Compile Metal shader
+        working-directory: macapp
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, pathlib
+          src = pathlib.Path("Sources/NyAnimeCore/LiquidGlassShaderSource.swift").read_text()
+          m = re.search(r'static let metal = #"""\n(.*?)\n"""#', src, re.S)
+          if not m:
+              raise SystemExit("could not extract shader source")
+          pathlib.Path("/tmp/GlassShaders.metal").write_text(m.group(1))
+          print("extracted", len(m.group(1)), "bytes of MSL")
+          PY
+          xcrun -sdk macosx metal -c /tmp/GlassShaders.metal -o /tmp/GlassShaders.air
+          echo "shader compiled cleanly"
+
       - name: Bundle NyAnime.app
         working-directory: macapp
         run: ./scripts/bundle-app.sh
