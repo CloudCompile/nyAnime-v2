@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { GLASS_CONFIG_JSON, initGlass } from '@/lib/liquidGlass';
+import type { LiquidGlass } from '@ybouane/liquidglass';
 
 interface GlassSurfaceProps {
   children: React.ReactNode;
@@ -21,7 +22,7 @@ export function GlassSurface({ children, className, style, config }: GlassSurfac
     const glass = glassRef.current;
     if (!root || !glass) return;
 
-    let instance: any = null;
+    let instance: LiquidGlass | null = null;
     let cancelled = false;
 
     initGlass(root, [glass]).then((inst) => {
@@ -30,7 +31,7 @@ export function GlassSurface({ children, className, style, config }: GlassSurfac
 
     return () => {
       cancelled = true;
-      instance?.destroy?.();
+      instance?.destroy();
     };
   }, []);
 

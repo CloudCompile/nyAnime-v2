@@ -29,7 +29,10 @@ jobs:
 
       - run: npm ci
       - name: Type-check
-        run: npx tsc --noEmit
+        # `tsc -b` walks the project references in tsconfig.json. A bare
+        # `tsc --noEmit` reads only the root tsconfig, which lists no files, so
+        # it type-checks nothing and passes even when an import is missing.
+        run: npx tsc -b
       - name: Lint
         run: npm run lint
       - name: Build

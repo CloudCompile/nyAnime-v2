@@ -37,7 +37,7 @@ routes by slug directly.
 npm ci
 npm run dev              # Vite dev server on :8080
 npm run build            # production bundle
-npx tsc --noEmit         # type-check
+npx tsc -b               # type-check (walks tsconfig references)
 npm run lint             # eslint; must stay at zero errors
 npm run verify:download  # end-to-end download + transmux check against the real API
 npm run verify:playback  # headless Chromium: real HLS playback through the proxy
