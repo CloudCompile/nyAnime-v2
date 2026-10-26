@@ -290,9 +290,8 @@ final class LiquidGlassRenderer {
         if stagingBuffer == nil || stagingBuffer!.length < byteCount {
             stagingBuffer = device.makeBuffer(length: byteCount, options: .storageModeShared)
         }
-        guard let staging = stagingBuffer, let base = staging.contents().baseAddress else {
-            return
-        }
+        guard let staging = stagingBuffer else { return }
+        let base = staging.contents()
 
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue

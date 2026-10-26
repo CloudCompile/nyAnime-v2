@@ -39,8 +39,9 @@ struct LiquidGlassSurface: NSViewRepresentable {
         view.delegate = context.coordinator
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+        // `NSView.isOpaque` is get-only in Swift; the layer is what matters for
+        // a transparent backing store.
         view.layer?.isOpaque = false
-        view.isOpaque = false
         // No continuous rendering: draw only when something changed.
         view.isPaused = true
         view.enableSetNeedsDisplay = true
@@ -124,8 +125,7 @@ struct LiquidGlassSurface: NSViewRepresentable {
         /// and feed its own output back in.
         private func captureBackdrop(of view: MTKView) -> CGImage? {
             guard let window = view.window,
-                  let contentView = window.contentView,
-                  let superview = view.superview
+                  let contentView = window.contentView
             else { return nil }
 
             // The view's rect expressed in the content view's coordinates.
