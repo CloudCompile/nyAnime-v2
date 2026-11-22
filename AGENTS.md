@@ -57,9 +57,14 @@ Key modules:
 - `src/lib/streamProxy.ts` — shared proxy logic. Rewrites manifests so every
   child URI points back through the proxy. Used by **both** `api/stream.ts`
   (Vercel edge function) and the dev plugin `vite-plugins/streamProxy.ts`; keep
-  them consistent. `ALLOWED_DOMAINS` is an allowlist of the stream CDN's
-  registrable domains — the CDN rotates hosts per episode, so add the domain,
-  not the hostname.
+  them consistent. `ALLOWED_DOMAINS` is an allowlist of the manifest hosts.
+  Playback segments come from a *different, randomly named host on every
+  episode* and are disguised as `.jpg`, so they cannot be allowlisted: every
+  child URI in a rewritten playlist carries an HMAC `sig` plus the manifest's
+  player `ref`, and a host outside the allowlist is served only when both check
+  out. Set `STREAM_PROXY_SECRET` in production to key the signature (it falls
+  back to the deployment id). Loopback, private and link-local targets are
+  rejected regardless.
 - `src/lib/download/` — client-side downloader. Segments are fetched
   sequentially and streamed to disk via a File System Access handle or a Blob
   fallback, never buffered whole in memory.
