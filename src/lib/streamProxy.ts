@@ -23,6 +23,9 @@ const ALLOWED_DOMAINS = [
   'echovideo.to',
   'echovideo.ru',
   'roburnt10.store',
+  // The megaplay players used by the current playback sources serve their
+  // manifests from here, and reject requests without a megaplay referer.
+  'nexabloom.top',
 ];
 
 /** True when `hostname` is one of the allowed domains or a subdomain of one. */
@@ -31,8 +34,26 @@ function isAllowedHost(hostname: string): boolean {
   return ALLOWED_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
 }
 
-/** The `Referer` the CDN expects. Requests without it are rejected or 404. */
+/**
+ * The `Referer` each CDN expects. Requests without the right one are rejected,
+ * so the header is chosen from the target host rather than hard-coded: the
+ * echovideo CDN wants its player, the megaplay CDN wants megaplay.
+ */
+const CDN_REFERERS: Array<{ domain: string; referer: string }> = [
+  { domain: 'nexabloom.top', referer: 'https://megaplay.buzz/' },
+  { domain: 'dpopdrop89.store', referer: 'https://play.echovideo.ru/' },
+  { domain: 'roburnt10.store', referer: 'https://play.echovideo.ru/' },
+];
+
+/** Default referer, used when no target host is supplied. */
 export const STREAM_REFERER = 'https://play.echovideo.ru/';
+
+/** The referer the proxy should send for a given upstream host. */
+export function refererFor(hostname: string): string {
+  const host = hostname.toLowerCase();
+  const match = CDN_REFERERS.find((entry) => host === entry.domain || host.endsWith(`.${entry.domain}`));
+  return match?.referer ?? STREAM_REFERER;
+}
 
 export const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -68,14 +89,20 @@ export function resolveTarget(rawUrl: string | null): ProxyTarget {
   return { url };
 }
 
-/** Headers to send upstream. */
-export function upstreamHeaders(): HeadersInit {
+/** Headers to send upstream, shaped for the host being fetched. */
+export function upstreamHeaders(url?: URL): HeadersInit {
+  const referer = url ? refererFor(url.hostname) : STREAM_REFERER;
   return {
-    Referer: STREAM_REFERER,
-    Origin: 'https://play.echovideo.ru',
+    Referer: referer,
+    Origin: new URL(referer).origin,
     'User-Agent': USER_AGENT,
     Accept: '*/*',
   };
+}
+
+/** True when the proxy is willing to fetch this hostname. */
+export function isCdnHost(hostname: string): boolean {
+  return isAllowedHost(hostname);
 }
 
 /**
@@ -161,7 +188,7 @@ export async function proxyFetch(
   proxyBase: string,
 ): Promise<{ status: number; body: BodyInit; headers: Record<string, string> }> {
   const response = await fetch(target.url.toString(), {
-    headers: upstreamHeaders(),
+    headers: upstreamHeaders(target.url),
     redirect: 'follow',
   });
 

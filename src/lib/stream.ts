@@ -8,6 +8,7 @@
  * player and the downloader never need to know which one answered.
  */
 import { STREAM_REFERER } from '../services/animeApiService';
+import { isCdnHost } from './streamProxy';
 
 export { STREAM_REFERER };
 
@@ -35,8 +36,9 @@ export function isProxied(url: string): boolean {
  */
 export function needsProxy(url: string): boolean {
   try {
-    const host = new URL(url).hostname;
-    return host.endsWith('dpopdrop89.store') || host.endsWith('echovideo.to') || host.endsWith('echovideo.ru');
+    // One allowlist, shared with the proxy itself, so the client can never
+    // route a URL the server would reject and vice versa.
+    return isCdnHost(new URL(url).hostname);
   } catch {
     return false;
   }
