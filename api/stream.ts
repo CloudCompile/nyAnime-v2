@@ -28,7 +28,8 @@ export default async function handler(request: Request): Promise<Response> {
   }
 
   try {
-    const target = resolveTarget(new URL(request.url).searchParams.get('url'));
+    const params = new URL(request.url).searchParams;
+    const target = await resolveTarget(params.get('url'), params.get('sig'));
     const proxyBase = `${origin}/api/stream`;
     const result = await proxyFetch(target, proxyBase);
     return new Response(result.body, {

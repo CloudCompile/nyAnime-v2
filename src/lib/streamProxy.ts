@@ -11,12 +11,33 @@
  * It backs the Vercel function (`api/stream.ts`). The same module can run on a
  * Cloudflare Worker unchanged, which is why the fetch logic is kept free of
  * Node-only APIs.
+ *
+ * ## Why URLs are signed
+ *
+ * The manifest host is stable (`fetch.nexabloom.top`), but the segments are
+ * served from a *different, randomly named host on every episode* — the samples
+ * so far have landed on `shadowharbor.space`, `silentforge.top`,
+ * `stellarfrontier.space` and others, each behind a random subdomain, and the
+ * video is disguised as `.jpg`. A host allowlist therefore cannot cover
+ * playback, and allowing every host would turn this deployment into an open
+ * relay.
+ *
+ * So the proxy signs what it hands out: every child URI is rewritten with an
+ * HMAC over the absolute upstream URL. A request for a host outside the
+ * allowlist is served only when its signature verifies, which means the caller
+ * can only fetch URLs that came out of a manifest we ourselves fetched from a
+ * trusted host. Signed targets must also look like media, as a second bound on
+ * what the proxy will spend bandwidth on.
+ *
+ * The signing key comes from `STREAM_PROXY_SECRET` when set (recommended in
+ * production), otherwise the platform's deployment id, so no configuration is
+ * required for playback to work.
  */
 
 /**
- * Upstream domains the proxy is willing to fetch. Entries are matched as
- * domains, not exact hostnames, because the CDN rotates through numbered
- * subdomains (`ru-cdn2`, `ru-ri-cdn3`, ...) that change per episode.
+ * Upstream domains the proxy is willing to fetch without a signature. Entries
+ * are matched as domains, not exact hostnames, because these hosts rotate
+ * through numbered subdomains that change per episode.
  */
 const ALLOWED_DOMAINS = [
   'dpopdrop89.store',
@@ -28,17 +49,85 @@ const ALLOWED_DOMAINS = [
   'nexabloom.top',
 ];
 
+/** File types a signed (non-allowlisted) target may serve. */
+const MEDIA_EXTENSIONS = /\.(m3u8|ts|m4s|mp4|m4a|aac|key|vtt|jpg|jpeg|webp)$/i;
+
 /** True when `hostname` is one of the allowed domains or a subdomain of one. */
 function isAllowedHost(hostname: string): boolean {
   const host = hostname.toLowerCase();
   return ALLOWED_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
 }
 
-/**
- * The `Referer` each CDN expects. Requests without the right one are rejected,
- * so the header is chosen from the target host rather than hard-coded: the
- * echovideo CDN wants its player, the megaplay CDN wants megaplay.
- */
+/** True when the proxy is willing to fetch this hostname without a signature. */
+export function isCdnHost(hostname: string): boolean {
+  return isAllowedHost(hostname);
+}
+
+/** Reject loopback, link-local and private-network targets outright. */
+function isPublicHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (!host || host === 'localhost' || host.endsWith('.localhost')) return false;
+  if (host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.home.arpa')) return false;
+  if (host.startsWith('[')) return false; // IPv6 literal
+  // Bare IPv4 literal, including the private and loopback ranges.
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return false;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Signing
+
+const SIGNING_KEY =
+  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+    ?.STREAM_PROXY_SECRET ||
+  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+    ?.VERCEL_DEPLOYMENT_ID ||
+  'nyanime-stream-proxy';
+
+let keyPromise: Promise<CryptoKey> | null = null;
+
+function signingKey(): Promise<CryptoKey> {
+  keyPromise ??= crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(SIGNING_KEY),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  return keyPromise;
+}
+
+function base64url(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** HMAC of an absolute upstream URL, as carried in a proxied `&sig=` param. */
+export async function signatureFor(url: string): Promise<string> {
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    await signingKey(),
+    new TextEncoder().encode(url),
+  );
+  return base64url(new Uint8Array(signature));
+}
+
+async function signatureMatches(url: string, signature: string): Promise<boolean> {
+  const expected = await signatureFor(url);
+  // Constant-time-ish comparison; lengths are public, contents are not.
+  if (expected.length !== signature.length) return false;
+  let diff = 0;
+  for (let index = 0; index < expected.length; index += 1) {
+    diff |= expected.charCodeAt(index) ^ signature.charCodeAt(index);
+  }
+  return diff === 0;
+}
+
+// ---------------------------------------------------------------------------
+// Targets
+
+/** The `Referer` each CDN expects. Requests without the right one are rejected. */
 const CDN_REFERERS: Array<{ domain: string; referer: string }> = [
   { domain: 'nexabloom.top', referer: 'https://megaplay.buzz/' },
   { domain: 'dpopdrop89.store', referer: 'https://play.echovideo.ru/' },
@@ -55,9 +144,6 @@ export function refererFor(hostname: string): string {
   return match?.referer ?? STREAM_REFERER;
 }
 
-export const USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-
 export interface ProxyTarget {
   url: URL;
 }
@@ -69,10 +155,16 @@ export class ProxyError extends Error {
 }
 
 /**
- * Validate a client-supplied target. Only the CDN hosts are allowed, so the
- * proxy cannot be used as an open relay.
+ * Validate a client-supplied target.
+ *
+ * An allowlisted host is accepted directly. Anything else needs a signature
+ * produced by `rewriteManifest` for that exact URL and must look like a media
+ * file, so the proxy cannot be used as a general-purpose relay.
  */
-export function resolveTarget(rawUrl: string | null): ProxyTarget {
+export async function resolveTarget(
+  rawUrl: string | null,
+  signature: string | null = null,
+): Promise<ProxyTarget> {
   if (!rawUrl) throw new ProxyError('Missing url parameter.');
   let url: URL;
   try {
@@ -83,11 +175,26 @@ export function resolveTarget(rawUrl: string | null): ProxyTarget {
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new ProxyError('Only http(s) targets are supported.');
   }
-  if (!isAllowedHost(url.hostname)) {
+  if (!isPublicHost(url.hostname)) {
     throw new ProxyError(`Host not allowed: ${url.hostname}`, 403);
+  }
+
+  if (isAllowedHost(url.hostname)) return { url };
+
+  if (!signature) {
+    throw new ProxyError(`Host not allowed: ${url.hostname}`, 403);
+  }
+  if (!MEDIA_EXTENSIONS.test(url.pathname)) {
+    throw new ProxyError(`Unsupported media target: ${url.pathname}`, 403);
+  }
+  if (!(await signatureMatches(url.toString(), signature))) {
+    throw new ProxyError(`Invalid signature for ${url.hostname}`, 403);
   }
   return { url };
 }
+
+export const USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 /** Headers to send upstream, shaped for the host being fetched. */
 export function upstreamHeaders(url?: URL): HeadersInit {
@@ -100,35 +207,60 @@ export function upstreamHeaders(url?: URL): HeadersInit {
   };
 }
 
-/** True when the proxy is willing to fetch this hostname. */
-export function isCdnHost(hostname: string): boolean {
-  return isAllowedHost(hostname);
-}
+// ---------------------------------------------------------------------------
+// Manifest rewriting
 
 /**
  * Rewrite a playlist so every child URI is fetched through the proxy.
  *
  * Both absolute and root-relative URIs are supported; `#EXT-X-KEY` and
  * `#EXT-X-MAP` carry their target in a `URI="..."` attribute rather than on
- * their own line, so those are rewritten in place.
+ * their own line, so those are rewritten in place. Each child URI is signed,
+ * which is what lets segments on per-episode hosts through.
  */
-export function rewriteManifest(
+export async function rewriteManifest(
   text: string,
   manifestUrl: URL,
   proxyBase: string,
-): string {
-  const toProxy = (uri: string): string => {
-    let absolute: string;
+): Promise<string> {
+  const absolute = (uri: string): string | null => {
     try {
-      absolute = new URL(uri, manifestUrl).toString();
+      return new URL(uri, manifestUrl).toString();
     } catch {
-      return uri;
+      return null;
     }
-    return `${proxyBase}?url=${encodeURIComponent(absolute)}`;
   };
 
-  return text
-    .split(/\r?\n/)
+  const lines = text.split(/\r?\n/);
+  const targets = new Set<string>();
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith('#')) {
+      for (const match of trimmed.matchAll(/URI="([^"]+)"/g)) {
+        const resolved = absolute(match[1]);
+        if (resolved) targets.add(resolved);
+      }
+    } else {
+      const resolved = absolute(trimmed);
+      if (resolved) targets.add(resolved);
+    }
+  }
+
+  const signatures = new Map<string, string>();
+  await Promise.all(
+    [...targets].map(async (target) => {
+      signatures.set(target, await signatureFor(target));
+    }),
+  );
+
+  const toProxy = (uri: string): string => {
+    const resolved = absolute(uri);
+    if (!resolved) return uri;
+    return `${proxyBase}?url=${encodeURIComponent(resolved)}&sig=${signatures.get(resolved) ?? ''}`;
+  };
+
+  return lines
     .map((line) => {
       const trimmed = line.trim();
       if (!trimmed) return line;
@@ -225,7 +357,7 @@ export async function proxyFetch(
     const text = decoder.decode(concatBytes(chunks));
     return {
       status: 200,
-      body: rewriteManifest(text, target.url, proxyBase),
+      body: await rewriteManifest(text, target.url, proxyBase),
       headers: { ...headers, 'Content-Type': 'application/vnd.apple.mpegurl' },
     };
   }
