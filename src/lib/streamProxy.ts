@@ -214,9 +214,12 @@ export const USER_AGENT =
  */
 export function upstreamHeaders(url?: URL, referer?: string): HeadersInit {
   const chosen = referer ?? (url ? refererFor(url.hostname) : STREAM_REFERER);
+  // The CDN compares the referer literally: `https://megaplay.buzz` is refused
+  // where `https://megaplay.buzz/` is served, so the path is always present.
+  const header = chosen.endsWith('/') ? chosen : `${chosen}/`;
   return {
-    Referer: chosen,
-    Origin: new URL(chosen).origin,
+    Referer: header,
+    Origin: new URL(header).origin,
     'User-Agent': USER_AGENT,
     Accept: '*/*',
   };
