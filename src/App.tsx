@@ -2,16 +2,12 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
-import { useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import AnimeDetails from "./pages/AnimeDetails";
 import Watch from "./pages/Watch";
 import NotFound from "./pages/NotFound";
-import SignIn from "./pages/SignIn";
-import SignUp from "./pages/SignUp";
-import Profile from "./pages/Profile";
-import Settings from "./pages/Settings";
+import Library from "./pages/Library";
 import AnimeList from "./pages/AnimeList";
 import NetworkStatus from "./components/NetworkStatus";
 import { LiquidGlassDefs } from "./components/ui/liquid-glass";
@@ -42,10 +38,12 @@ const App = () => (
           <Route path="/anime" element={<AnimeList />} />
           <Route path="/anime/:id" element={<AnimeDetails />} />
           <Route path="/anime/:id/watch" element={<Watch />} />
-          <Route path="/signin" element={<SignIn />} />
-          <Route path="/signup" element={<SignUp />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/library" element={<Library />} />
+          {/* Old bookmarks and links to the removed account pages. */}
+          <Route path="/profile" element={<Navigate to="/library" replace />} />
+          <Route path="/settings" element={<Navigate to="/library" replace />} />
+          <Route path="/signin" element={<Navigate to="/library" replace />} />
+          <Route path="/signup" element={<Navigate to="/library" replace />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Play, ChevronRight, X } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { getUserData, removeFromWatchHistory } from '@/services/authService';
+import { getLibrary, removeFromWatchHistory } from '@/services/localLibrary';
 import { fetchAnimeByRouteId } from '@/hooks/useAnimeData';
 import { toast } from '@/hooks/use-toast';
 
@@ -33,26 +33,15 @@ function formatLastWatched(date: Date): string {
  */
 const ContinueWatching = () => {
   const navigate = useNavigate();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [watchProgress, setWatchProgress] = useState<WatchProgressItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedUserId = localStorage.getItem('userId');
-    setIsLoggedIn(!!storedUserId);
-    setUserId(storedUserId);
-    if (!storedUserId) {
-      setIsLoading(false);
-      return;
-    }
-
     let cancelled = false;
 
     (async () => {
       try {
-        const userData = await getUserData(storedUserId);
-        const recent = userData.history.slice(0, 4);
+        const recent = getLibrary().history.slice(0, 4);
         const resolved = await Promise.all(
           recent.map(async (item): Promise<WatchProgressItem> => {
             const anime = await fetchAnimeByRouteId(String(item.animeId)).catch(() => null);
@@ -82,18 +71,10 @@ const ContinueWatching = () => {
     };
   }, []);
 
-  const handleRemoveItem = async (animeId: string, event: React.MouseEvent) => {
+  const handleRemoveItem = (animeId: string, event: React.MouseEvent) => {
     event.stopPropagation();
-    if (!userId) {
-      toast({
-        title: 'Error',
-        description: 'You must be logged in to remove items',
-        variant: 'destructive',
-      });
-      return;
-    }
     try {
-      await removeFromWatchHistory(userId, animeId);
+      removeFromWatchHistory(animeId);
       setWatchProgress((prev) => prev.filter((item) => item.id !== animeId));
       toast({ title: 'Removed', description: 'Item removed from your continue watching list' });
     } catch (error) {
@@ -116,7 +97,7 @@ const ContinueWatching = () => {
   const watchUrl = (item: WatchProgressItem) =>
     `/anime/${item.id}/watch?ep=${item.episode}&t=${item.timestamp}`;
 
-  if (!isLoggedIn || (watchProgress.length === 0 && !isLoading)) return null;
+  if (watchProgress.length === 0 && !isLoading) return null;
 
   return (
     <section className="py-6">
@@ -126,7 +107,7 @@ const ContinueWatching = () => {
             <div className="mr-3 h-6 w-2 rounded-full bg-anime-purple" />
             <h2 className="text-xl font-semibold text-white">Continue Watching</h2>
           </div>
-          <a href="/profile" className="flex items-center text-sm text-anime-purple hover:underline">
+          <a href="/library" className="flex items-center text-sm text-anime-purple hover:underline">
             View All <ChevronRight className="h-4 w-4" />
           </a>
         </div>

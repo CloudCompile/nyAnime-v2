@@ -1,13 +1,10 @@
-
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 import './liquid-glass.css'
-import { initializeDbService } from './services/dbService'
 import { Toaster } from '@/components/ui/toaster'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-// Liquid glass is now applied per-surface via <GlassSurface> components.
 
 // Create a client
 const queryClient = new QueryClient({
@@ -18,12 +15,6 @@ const queryClient = new QueryClient({
       staleTime: 5 * 60 * 1000, // 5 minutes
     },
   },
-});
-
-// Initialize the database service (now browser-compatible)
-initializeDbService().catch(error => {
-  console.error('Failed to initialize database service:', error);
-  console.log('Application will continue with limited functionality');
 });
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

@@ -22,7 +22,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
-import { addToWatchlist, getCurrentUserData, getUserData } from '@/services/authService';
+import { addToWatchlist, isInWatchlist } from '@/services/localLibrary';
 
 const AnimeDetails = () => {
   const { id = '' } = useParams();
@@ -34,8 +34,7 @@ const AnimeDetails = () => {
   const { enqueue } = useDownloads();
 
   const [episodes, setEpisodes] = useState<EpisodeSummary[]>([]);
-  const [isInWatchlist, setIsInWatchlist] = useState(false);
-  const [isAdding, setIsAdding] = useState(false);
+  const [savedToWatchlist, setSavedToWatchlist] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -51,41 +50,14 @@ const AnimeDetails = () => {
   }, [id]);
 
   useEffect(() => {
-    const user = getCurrentUserData();
-    if (!user) return;
-    let cancelled = false;
-    getUserData(user.id)
-      .then((data) => {
-        if (cancelled) return;
-        setIsInWatchlist(data.watchlist.some((item) => String(item.animeId) === id));
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
+    if (!id) return;
+    setSavedToWatchlist(isInWatchlist(id));
   }, [id]);
 
-  const handleAddToWatchlist = async () => {
-    const user = getCurrentUserData();
-    if (!user) {
-      toast({ title: 'Sign in required', description: 'Please sign in to use your watchlist.' });
-      navigate('/signin');
-      return;
-    }
-    setIsAdding(true);
-    try {
-      await addToWatchlist(user.id, id);
-      setIsInWatchlist(true);
-      toast({ title: 'Added to watchlist', description: anime?.title ?? 'Anime added.' });
-    } catch (error) {
-      toast({
-        title: 'Could not update watchlist',
-        description: error instanceof Error ? error.message : 'Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsAdding(false);
-    }
+  const handleAddToWatchlist = () => {
+    addToWatchlist(id);
+    setSavedToWatchlist(true);
+    toast({ title: 'Added to watchlist', description: anime?.title ?? 'Anime added.' });
   };
 
   const downloadAll = () => {
@@ -197,9 +169,9 @@ const AnimeDetails = () => {
                 <Button
                   variant="secondary"
                   onClick={handleAddToWatchlist}
-                  disabled={isAdding || isInWatchlist}
+                  disabled={savedToWatchlist}
                 >
-                  {isInWatchlist ? (
+                  {savedToWatchlist ? (
                     <>
                       <Heart className="mr-2 h-4 w-4" fill="currentColor" />
                       In watchlist

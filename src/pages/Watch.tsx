@@ -30,7 +30,7 @@ import { useDownloads } from '../hooks/useDownloads';
 import { resolveSlug } from '../hooks/useAnimeData';
 import { rememberSlug } from '../lib/animeIds';
 import { loadSubtitleDelay, saveSubtitleDelay } from '../lib/subtitles';
-import { getCurrentUserData, updateWatchHistory } from '../services/authService';
+import { updateWatchHistory } from '../services/localLibrary';
 
 const Watch = () => {
   const { id = '' } = useParams();
@@ -148,15 +148,12 @@ const Watch = () => {
   const handleProgress = useCallback(
     (seconds: number, duration: number) => {
       if (!anime || duration <= 0) return;
-      const user = getCurrentUserData();
-      if (!user) return;
-      void updateWatchHistory(
-        user.id,
+      updateWatchHistory(
         anime.dataId,
         episodeNumber,
         Math.round((seconds / duration) * 100),
         Math.round(seconds),
-      ).catch(() => undefined);
+      );
     },
     [anime, episodeNumber],
   );

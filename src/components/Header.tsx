@@ -1,24 +1,13 @@
 
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Menu, Bell, User, ChevronDown, LogOut, TrendingUp, Flame, Settings as SettingsIcon } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Menu, Library, ChevronDown, TrendingUp, Flame } from 'lucide-react';
 import SearchBar from './SearchBar';
-import { 
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
 import { useIsMobile } from '@/hooks/use-mobile';
 
 const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [username, setUsername] = useState('');
-  const navigate = useNavigate();
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -30,39 +19,9 @@ const Header = () => {
       }
     };
 
-    const checkAuth = () => {
-      const userJson = localStorage.getItem('user');
-      if (userJson) {
-        try {
-          const userData = JSON.parse(userJson);
-          setIsLoggedIn(true);
-          setUsername(userData.username || 'User');
-        } catch (error) {
-          console.error("Failed to parse user data");
-          setIsLoggedIn(false);
-        }
-      } else {
-        setIsLoggedIn(false);
-      }
-    };
-
     window.addEventListener('scroll', handleScroll);
-    checkAuth();
-    
-    // Listen for auth changes
-    window.addEventListener('storage', checkAuth);
-    
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('storage', checkAuth);
-    };
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem('user');
-    setIsLoggedIn(false);
-    navigate('/');
-  };
 
   const categories = [
     'Action', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Romance', 'Sci-Fi', 'Slice of Life'
@@ -131,60 +90,14 @@ const Header = () => {
           <div className="flex items-center space-x-5">
             <SearchBar />
             
-            {isLoggedIn ? (
-              <>
-                <Link to="/notifications" className="hidden md:flex text-white/70 hover:text-white transition-colors">
-                  <Bell className="h-5 w-5" />
-                </Link>
-                
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="hidden md:flex items-center gap-2 px-2 py-1 rounded-full hover:bg-white/10 transition-colors">
-                    <div className="w-8 h-8 bg-anime-purple/20 rounded-full flex items-center justify-center">
-                      <User className="h-4 w-4 text-anime-purple" />
-                    </div>
-                    <span className="text-white text-sm font-medium">{username}</span>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56 bg-anime-dark border-white/10 text-white">
-                    <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                    <DropdownMenuSeparator className="bg-white/10" />
-                    <DropdownMenuItem className="focus:bg-white/10 cursor-pointer" onClick={() => navigate('/profile')}>
-                      <User className="mr-2 h-4 w-4" />
-                      <span>Profile</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="focus:bg-white/10 cursor-pointer" onClick={() => navigate('/profile')}>
-                      <span>Watchlist</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="focus:bg-white/10 cursor-pointer" onClick={() => navigate('/profile')}>
-                      <span>History</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="focus:bg-white/10 cursor-pointer" onClick={() => navigate('/settings')}>
-                      <SettingsIcon className="mr-2 h-4 w-4" />
-                      <span>Settings</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator className="bg-white/10" />
-                    <DropdownMenuItem className="focus:bg-white/10 cursor-pointer text-red-400" onClick={handleLogout}>
-                      <LogOut className="mr-2 h-4 w-4" />
-                      <span>Log Out</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </>
-            ) : (
-              <div className="hidden md:flex items-center space-x-3">
-                <Link 
-                  to="/signin"
-                  className="text-white font-medium text-sm hover:text-anime-purple transition-colors"
-                >
-                  Sign In
-                </Link>
-                <Link 
-                  to="/signup"
-                  className="bg-anime-purple text-white font-medium text-sm px-4 py-2 rounded-md hover:bg-anime-purple/90 transition-colors"
-                >
-                  Sign Up
-                </Link>
-              </div>
-            )}
+            <Link
+              to="/library"
+              title="My library - saved on this device"
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <Library className="h-5 w-5" />
+              <span className="text-sm font-medium">Library</span>
+            </Link>
             
             {/* Mobile Menu Button */}
             <button 
@@ -221,34 +134,9 @@ const Header = () => {
             ))}
             
             <div className="pt-2 border-t border-white/10">
-              {isLoggedIn ? (
-                <>
-                  <Link to="/profile" className="text-white flex items-center py-2 hover:text-anime-purple">
-                    <User className="h-5 w-5 mr-2" /> Profile
-                  </Link>
-                  <button 
-                    onClick={handleLogout} 
-                    className="text-red-400 flex items-center py-2 hover:text-red-300 w-full text-left"
-                  >
-                    <LogOut className="h-5 w-5 mr-2" /> Log Out
-                  </button>
-                </>
-              ) : (
-                <div className="flex flex-col space-y-3 pt-2">
-                  <Link 
-                    to="/signin"
-                    className="text-white font-medium hover:text-anime-purple transition-colors"
-                  >
-                    Sign In
-                  </Link>
-                  <Link 
-                    to="/signup"
-                    className="bg-anime-purple text-white font-medium px-4 py-2 rounded-md hover:bg-anime-purple/90 transition-colors inline-block w-full text-center"
-                  >
-                    Sign Up
-                  </Link>
-                </div>
-              )}
+              <Link to="/library" className="text-white flex items-center py-2 hover:text-anime-purple">
+                <Library className="h-5 w-5 mr-2" /> My Library
+              </Link>
             </div>
           </nav>
         </div>
