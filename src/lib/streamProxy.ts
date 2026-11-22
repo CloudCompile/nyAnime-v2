@@ -144,8 +144,16 @@ export function refererFor(hostname: string): string {
   return match?.referer ?? STREAM_REFERER;
 }
 
+/** Player origins a proxied request is allowed to claim as its referer. */
+const ALLOWED_REFERER_ORIGINS = new Set([
+  'https://megaplay.buzz',
+  'https://play.echovideo.ru',
+]);
+
 export interface ProxyTarget {
   url: URL;
+  /** Referer to send upstream; set from the manifest the URL came out of. */
+  referer?: string;
 }
 
 export class ProxyError extends Error {
@@ -164,6 +172,7 @@ export class ProxyError extends Error {
 export async function resolveTarget(
   rawUrl: string | null,
   signature: string | null = null,
+  referer: string | null = null,
 ): Promise<ProxyTarget> {
   if (!rawUrl) throw new ProxyError('Missing url parameter.');
   let url: URL;
@@ -179,7 +188,9 @@ export async function resolveTarget(
     throw new ProxyError(`Host not allowed: ${url.hostname}`, 403);
   }
 
-  if (isAllowedHost(url.hostname)) return { url };
+  const claimedReferer = referer && ALLOWED_REFERER_ORIGINS.has(referer) ? referer : undefined;
+
+  if (isAllowedHost(url.hostname)) return { url, referer: claimedReferer };
 
   if (!signature) {
     throw new ProxyError(`Host not allowed: ${url.hostname}`, 403);
@@ -190,18 +201,22 @@ export async function resolveTarget(
   if (!(await signatureMatches(url.toString(), signature))) {
     throw new ProxyError(`Invalid signature for ${url.hostname}`, 403);
   }
-  return { url };
+  return { url, referer: claimedReferer };
 }
 
 export const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-/** Headers to send upstream, shaped for the host being fetched. */
-export function upstreamHeaders(url?: URL): HeadersInit {
-  const referer = url ? refererFor(url.hostname) : STREAM_REFERER;
+/**
+ * Headers to send upstream. An explicit referer (carried from the manifest)
+ * wins, because a segment host only accepts the player that served it; the
+ * host lookup is the fallback for directly requested manifests.
+ */
+export function upstreamHeaders(url?: URL, referer?: string): HeadersInit {
+  const chosen = referer ?? (url ? refererFor(url.hostname) : STREAM_REFERER);
   return {
-    Referer: referer,
-    Origin: new URL(referer).origin,
+    Referer: chosen,
+    Origin: new URL(chosen).origin,
     'User-Agent': USER_AGENT,
     Accept: '*/*',
   };
@@ -254,10 +269,15 @@ export async function rewriteManifest(
     }),
   );
 
+  // Children are fetched with the referer of the manifest's own player: the
+  // segment host only answers the player that served it. Carried explicitly so
+  // a randomly named segment host knows which one that is.
+  const referer = new URL(refererFor(manifestUrl.hostname)).origin;
+
   const toProxy = (uri: string): string => {
     const resolved = absolute(uri);
     if (!resolved) return uri;
-    return `${proxyBase}?url=${encodeURIComponent(resolved)}&sig=${signatures.get(resolved) ?? ''}`;
+    return `${proxyBase}?url=${encodeURIComponent(resolved)}&sig=${signatures.get(resolved) ?? ''}&ref=${encodeURIComponent(referer)}`;
   };
 
   return lines
@@ -320,7 +340,7 @@ export async function proxyFetch(
   proxyBase: string,
 ): Promise<{ status: number; body: BodyInit; headers: Record<string, string> }> {
   const response = await fetch(target.url.toString(), {
-    headers: upstreamHeaders(target.url),
+    headers: upstreamHeaders(target.url, target.referer),
     redirect: 'follow',
   });
 

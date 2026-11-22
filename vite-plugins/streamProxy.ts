@@ -43,7 +43,11 @@ export function streamProxyPlugin(): Plugin {
         try {
           const origin = `http://${req.headers.host ?? 'localhost'}`;
           const params = new URL(req.url ?? '', origin).searchParams;
-          const target = await resolveTarget(params.get('url'), params.get('sig'));
+          const target = await resolveTarget(
+            params.get('url'),
+            params.get('sig'),
+            params.get('ref'),
+          );
           const result = await proxyFetch(target, `${origin}/api/stream`);
 
           // A streamed body is piped rather than buffered, so a large segment
