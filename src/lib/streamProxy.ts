@@ -47,6 +47,9 @@ const ALLOWED_DOMAINS = [
   // The megaplay players used by the current playback sources serve their
   // manifests from here, and reject requests without a megaplay referer.
   'nexabloom.top',
+  // Vidplay's current manifest host. It rotates its numbered subdomain, so the
+  // registrable domain is allow-listed and the suffix check covers the rest.
+  'crystaldrift.world',
 ];
 
 /** File types a signed (non-allowlisted) target may serve. */
@@ -132,6 +135,7 @@ const CDN_REFERERS: Array<{ domain: string; referer: string }> = [
   { domain: 'nexabloom.top', referer: 'https://megaplay.buzz/' },
   { domain: 'dpopdrop89.store', referer: 'https://play.echovideo.ru/' },
   { domain: 'roburnt10.store', referer: 'https://play.echovideo.ru/' },
+  { domain: 'crystaldrift.world', referer: 'https://megaplay.buzz/' },
 ];
 
 /** Default referer, used when no target host is supplied. */

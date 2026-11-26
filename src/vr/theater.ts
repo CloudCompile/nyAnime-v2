@@ -159,11 +159,37 @@ export async function enterTheater(
     [0, 5.55, -7],
   );
 
+  const startedAt = performance.now();
+  let userPaused = false;
+  let disposed = false;
+  let resumeAttempts = 0;
+
   const togglePlayback = () => {
-    if (video.paused) void video.play().catch(() => undefined);
-    else video.pause();
+    // The trigger press that selected "Enter VR theater" can arrive as a
+    // select event just after the session starts; it must not pause the film.
+    if (performance.now() - startedAt < 1500) return;
+    if (video.paused) {
+      userPaused = false;
+      void video.play().catch(() => undefined);
+    } else {
+      userPaused = true;
+      video.pause();
+    }
   };
   session.addEventListener("select", togglePlayback);
+
+  // Quest can pause a video element when the 2D page is suspended. A pause we
+  // did not ask for would otherwise leave a frozen frame in the room.
+  const resumeAfterExternalPause = () => {
+    if (disposed || userPaused || video.ended || resumeAttempts >= 3) return;
+    resumeAttempts += 1;
+    window.setTimeout(() => {
+      if (!disposed && !userPaused && video.paused) {
+        void video.play().catch(() => undefined);
+      }
+    }, 400);
+  };
+  video.addEventListener("pause", resumeAfterExternalPause);
 
   try {
     await renderer.xr.setSession(session);
@@ -196,8 +222,10 @@ export async function enterTheater(
   });
 
   const cleanup = () => {
+    disposed = true;
     renderer.setAnimationLoop(null);
     session.removeEventListener("select", togglePlayback);
+    video.removeEventListener("pause", resumeAfterExternalPause);
     video.pause();
     textures.forEach((texture) => texture.dispose());
     geometries.forEach((geometry) => geometry.dispose());

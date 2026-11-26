@@ -151,12 +151,27 @@ const VrTheater = () => {
     let hls: Hls | null = null;
 
     if (Hls.isSupported()) {
-      hls = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60, enableWorker: true });
+      hls = new Hls({
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        enableWorker: true,
+      });
+      // A cinema screen exposes every bit of compression, so start on the best
+      // rendition instead of letting ABR ramp up from its 500 kbps default.
+      hls.config.capLevelToPlayerSize = false;
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (hls && hls.levels.length > 0) {
+          hls.currentLevel = hls.levels.length - 1;
+        }
+      });
       hls.loadSource(source);
       hls.attachMedia(video);
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (!data.fatal) return;
+        // A frozen frame inside the headset is worse than leaving the room; the
+        // page can then show what went wrong.
         setError("The stream stopped. Go back and pick another episode or title.");
+        setPhase("error");
       });
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = source;
