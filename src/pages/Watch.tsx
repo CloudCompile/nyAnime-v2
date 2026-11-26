@@ -296,6 +296,7 @@ const Watch = () => {
                 onProgress={handleProgress}
                 onEnded={goNext}
                 subtitles={stream.tracks}
+                theaterTitle={anime?.title}
                 intro={stream.intro}
                 outro={stream.outro}
                 initialSubtitleDelay={loadSubtitleDelay(anime?.dataId ?? id)}

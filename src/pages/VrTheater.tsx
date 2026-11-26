@@ -186,16 +186,15 @@ const VrTheater = () => {
     return `/anime/${animeId}/watch${query ? `?${query}` : ""}`;
   }, [animeId, episode]);
 
-  const handleEnter = useCallback(async () => {
+  const startTheater = useCallback(async () => {
     const video = videoRef.current;
-    if (!video || !stream?.file) return;
+    if (!video) return false;
 
     setEntering(true);
     setError(null);
     try {
-      // Both calls stay inside the click gesture: play() first, then the
-      // session request, without awaiting anything in between.
-      void video.play().catch(() => undefined);
+      // requestSession runs synchronously inside enterTheater, so this must be
+      // reached without awaiting anything that spends the user activation.
       const handle = await enterTheater(video, { title: info?.title });
       sessionRef.current = handle.session;
       setSession(handle.session);
@@ -208,16 +207,54 @@ const VrTheater = () => {
         },
         { once: true },
       );
+      return true;
     } catch (err) {
       setError(
         err instanceof Error
           ? `Could not start the theater: ${err.message}`
           : "Could not start the theater. Open this page in the Quest browser and allow VR.",
       );
+      return false;
     } finally {
       setEntering(false);
     }
-  }, [info?.title, stream?.file]);
+  }, [info?.title]);
+
+  const handleEnter = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || !stream?.file) return;
+    void video.play().catch(() => undefined);
+    await startTheater();
+  }, [startTheater, stream?.file]);
+
+  // Launching the installed app counts as the user action WebXR needs, so a
+  // Quest library launch opens the theater instead of a 2D panel with a button.
+  // The room is entered before the stream resolves; it shows black until the
+  // video is attached, which is preferable to losing the activation by awaiting
+  // the catalogue first.
+  const autoEnterRef = useRef(false);
+  useEffect(() => {
+    if (autoEnterRef.current) return;
+    if (xr !== "supported") return;
+    if (!window.matchMedia("(display-mode: standalone)").matches) return;
+    const hasTarget = Boolean(animeId) || Boolean(getLibrary().history[0]);
+    if (!hasTarget) return;
+    autoEnterRef.current = true;
+    void startTheater();
+  }, [animeId, startTheater, xr]);
+
+  // If the launch happened before the stream was ready, start playback once it
+  // is. A trigger press still works if the browser refuses autoplay.
+  useEffect(() => {
+    if (!session || !stream?.file) return;
+    videoRef.current?.play().catch(() => undefined);
+  }, [session, stream?.file]);
+
+  // A failed stream is invisible inside the headset, so return to the page
+  // where the error is rendered.
+  useEffect(() => {
+    if (phase === "error" && session) void session.end().catch(() => undefined);
+  }, [phase, session]);
 
   const xrNotice =
     xr === "unsupported" ? (

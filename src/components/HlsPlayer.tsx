@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Hls, { type Level } from 'hls.js';
 import {
   Captions,
+  Glasses,
   Loader2,
   Maximize,
   Minimize,
@@ -35,6 +36,8 @@ export interface HlsPlayerProps {
   initialSubtitleDelay?: number;
   /** Called when the viewer changes the subtitle delay. */
   onSubtitleDelayChange?: (seconds: number) => void;
+  /** Shown on the theater marquee. */
+  theaterTitle?: string;
 }
 
 const PROGRESS_REPORT_INTERVAL_MS = 5000;
@@ -74,6 +77,7 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
   outro = [],
   initialSubtitleDelay = 0,
   onSubtitleDelayChange,
+  theaterTitle,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -100,6 +104,12 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
   const [activeSubtitle, setActiveSubtitle] = useState(0);
   const [subtitleDelay, setSubtitleDelay] = useState(initialSubtitleDelay);
   const [rawVtt, setRawVtt] = useState<string | null>(null);
+  const [xrSupported, setXrSupported] = useState(false);
+  const [theaterBusy, setTheaterBusy] = useState(false);
+  const [theaterError, setTheaterError] = useState<string | null>(null);
+  // Preloaded so the VR click can request the session synchronously, without
+  // an intervening `await import()` that could spend the user activation.
+  const theaterModuleRef = useRef<typeof import('../vr/theater') | null>(null);
 
   const playableSrc = useMemo(() => maybeProxy(src), [src]);
 
@@ -276,6 +286,43 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
     if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
     hideTimerRef.current = window.setTimeout(hideControls, CONTROLS_HIDE_DELAY_MS);
   }, [hideControls]);
+
+  // Only WebXR-capable browsers get the VR control, and only they pay for
+  // loading the three.js theater chunk.
+  useEffect(() => {
+    let cancelled = false;
+    const xr = navigator.xr;
+    if (!xr?.isSessionSupported) return;
+    xr.isSessionSupported('immersive-vr')
+      .then((supported) => {
+        if (cancelled || !supported) return;
+        setXrSupported(true);
+        void import('../vr/theater')
+          .then((module) => {
+            if (!cancelled) theaterModuleRef.current = module;
+          })
+          .catch(() => undefined);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleEnterTheater = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || theaterBusy) return;
+    setTheaterBusy(true);
+    setTheaterError(null);
+    try {
+      const module = theaterModuleRef.current ?? (await import('../vr/theater'));
+      const handle = await module.enterTheater(video, { title: theaterTitle });
+      handle.session.addEventListener('end', () => setTheaterBusy(false), { once: true });
+    } catch {
+      setTheaterBusy(false);
+      setTheaterError('Could not start the VR session. Open this page in the Quest browser.');
+    }
+  }, [theaterBusy, theaterTitle]);
 
   const toggleFullscreen = useCallback(async () => {
     const container = containerRef.current;
@@ -481,6 +528,12 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
         onEnded={onEnded}
       />
 
+      {theaterError && (
+        <div className="absolute left-3 top-3 z-20 rounded-md bg-red-500/90 px-3 py-1.5 text-xs font-medium text-white">
+          {theaterError}
+        </div>
+      )}
+
       {isLoading && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40">
           <Loader2 className="h-8 w-8 animate-spin text-white" />
@@ -586,6 +639,19 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
                 </option>
               ))}
             </select>
+          )}
+
+          {xrSupported && (
+            <button
+              type="button"
+              onClick={handleEnterTheater}
+              disabled={theaterBusy}
+              aria-label="Enter VR theater"
+              className="flex items-center gap-1 text-white/80 transition-colors hover:text-white disabled:opacity-50"
+            >
+              <Glasses className="h-5 w-5" />
+              <span className="hidden text-xs font-medium sm:inline">VR</span>
+            </button>
           )}
 
           <button onClick={toggleFullscreen} aria-label="Fullscreen">
