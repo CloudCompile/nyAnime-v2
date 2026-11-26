@@ -5,7 +5,10 @@ import { componentTagger } from "lovable-tagger";
 import { streamProxyPlugin } from "./vite-plugins/streamProxy";
 
 export default defineConfig(({ mode }) => ({
-  base: './',
+  // Root-absolute URLs. With `./`, a direct load of /anime/1535 asked for
+  // /anime/assets/... and Vercel answered that with index.html, so the module
+  // script was refused and the page came up blank.
+  base: '/',
   server: {
     host: "::",
     port: 8080,
