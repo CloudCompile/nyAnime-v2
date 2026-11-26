@@ -52,9 +52,6 @@ const ALLOWED_DOMAINS = [
   'crystaldrift.world',
 ];
 
-/** File types a signed (non-allowlisted) target may serve. */
-const MEDIA_EXTENSIONS = /\.(m3u8|ts|m4s|mp4|m4a|aac|key|vtt|jpg|jpeg|webp)$/i;
-
 /** True when `hostname` is one of the allowed domains or a subdomain of one. */
 function isAllowedHost(hostname: string): boolean {
   const host = hostname.toLowerCase();
@@ -170,8 +167,10 @@ export class ProxyError extends Error {
  * Validate a client-supplied target.
  *
  * An allowlisted host is accepted directly. Anything else needs a signature
- * produced by `rewriteManifest` for that exact URL and must look like a media
- * file, so the proxy cannot be used as a general-purpose relay.
+ * produced by `rewriteManifest` for that exact URL, which is what stops the
+ * proxy being a general-purpose relay. The target's extension is deliberately
+ * not checked: the CDN disguises each segment with a random one (`.jpg`,
+ * `.html`, `.js`, `.css`, `.png`...), so an extension list blocks real video.
  */
 export async function resolveTarget(
   rawUrl: string | null,
@@ -198,9 +197,6 @@ export async function resolveTarget(
 
   if (!signature) {
     throw new ProxyError(`Host not allowed: ${url.hostname}`, 403);
-  }
-  if (!MEDIA_EXTENSIONS.test(url.pathname)) {
-    throw new ProxyError(`Unsupported media target: ${url.pathname}`, 403);
   }
   if (!(await signatureMatches(url.toString(), signature))) {
     throw new ProxyError(`Invalid signature for ${url.hostname}`, 403);
