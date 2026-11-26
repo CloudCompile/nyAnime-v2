@@ -27,6 +27,15 @@ const Library = () => {
   const [history, setHistory] = useState<LibraryCard[]>([]);
   const [favorites, setFavorites] = useState<LibraryCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Bumped whenever anything writes to the library, so this page never shows
+  // an entry that was just unfavourited on another page.
+  const [revision, setRevision] = useState(0);
+
+  useEffect(() => {
+    const handleLibraryChange = () => setRevision((value) => value + 1);
+    window.addEventListener('nyanime:library-changed', handleLibraryChange);
+    return () => window.removeEventListener('nyanime:library-changed', handleLibraryChange);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +81,7 @@ const Library = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [revision]);
 
   const grid = (cards: LibraryCard[], empty: string) =>
     cards.length === 0 ? (

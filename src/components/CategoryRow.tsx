@@ -1,7 +1,8 @@
 
 import React, { useRef } from 'react';
+import { Link } from 'react-router-dom';
 import AnimeCard from './AnimeCard';
-import { ChevronLeft, ChevronRight, ChevronRightIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface CategoryRowProps {
   title: string;
@@ -40,12 +41,12 @@ const CategoryRow = ({ title, seeAllLink, animeList }: CategoryRowProps) => {
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-2xl font-bold text-white">{title}</h2>
           {seeAllLink && (
-            <a 
-              href={seeAllLink} 
+            <Link
+              to={seeAllLink}
               className="flex items-center text-sm font-medium text-anime-purple hover:underline"
             >
               See All <ChevronRight className="h-4 w-4 ml-1" />
-            </a>
+            </Link>
           )}
         </div>
         
@@ -75,17 +76,20 @@ const CategoryRow = ({ title, seeAllLink, animeList }: CategoryRowProps) => {
           </div>
           
           {/* Scroll Buttons */}
-          <button 
-            onClick={() => scroll('left')} 
-            className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 bg-black/50 rounded-full p-2 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 hover:bg-black/70 focus:outline-none disabled:opacity-0"
+          {/* Visible on touch screens and TVs, where hover never happens. */}
+          <button
+            type="button"
+            onClick={() => scroll('left')}
+            className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 rounded-full bg-black/60 p-2 text-white opacity-70 transition-opacity duration-300 hover:bg-black/80 hover:opacity-100 md:opacity-0 md:group-hover:opacity-100"
             aria-label="Scroll left"
           >
             <ChevronLeft className="h-6 w-6" />
           </button>
-          
-          <button 
-            onClick={() => scroll('right')} 
-            className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 bg-black/50 rounded-full p-2 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 hover:bg-black/70 focus:outline-none disabled:opacity-0"
+
+          <button
+            type="button"
+            onClick={() => scroll('right')}
+            className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 rounded-full bg-black/60 p-2 text-white opacity-70 transition-opacity duration-300 hover:bg-black/80 hover:opacity-100 md:opacity-0 md:group-hover:opacity-100"
             aria-label="Scroll right"
           >
             <ChevronRight className="h-6 w-6" />

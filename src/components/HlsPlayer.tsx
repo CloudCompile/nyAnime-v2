@@ -85,6 +85,9 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Changes force a fresh attach after a fatal error; without it the error
+  // screen was a dead end.
+  const [reloadToken, setReloadToken] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -120,6 +123,9 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
     setError(null);
     appliedProgressRef.current = false;
 
+    let networkErrors = 0;
+    let mediaErrors = 0;
+
     if (Hls.isSupported()) {
       const hls = new Hls({
         // A modest buffer keeps memory bounded; a whole episode is never held.
@@ -148,12 +154,18 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
         // A network error usually means the proxy could not reach the CDN, and
         // hls.js can recover from it; a media error cannot be recovered.
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-          hls.startLoad();
-          return;
-        }
-        if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-          hls.recoverMediaError();
-          return;
+          // Retrying forever hid an unreachable CDN behind an endless spinner.
+          if (networkErrors < 2) {
+            networkErrors += 1;
+            hls.startLoad();
+            return;
+          }
+        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          if (mediaErrors < 2) {
+            mediaErrors += 1;
+            hls.recoverMediaError();
+            return;
+          }
         }
         setError('This stream could not be played. Try another server.');
         setIsLoading(false);
@@ -175,7 +187,7 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
       video.removeAttribute('src');
       video.load();
     };
-  }, [playableSrc, autoPlay]);
+  }, [playableSrc, autoPlay, reloadToken]);
 
   // --- subtitles ----------------------------------------------------------
   // Fetch the raw cue file whenever the track changes, and switch subtitles on
@@ -427,8 +439,19 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
 
   if (error) {
     return (
-      <div className="w-full aspect-video flex items-center justify-center bg-black rounded-xl">
-        <p className="text-white/80 text-sm px-6 text-center">{error}</p>
+      <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-xl bg-black">
+        <p className="px-6 text-center text-sm text-white/80">{error}</p>
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setIsLoading(true);
+            setReloadToken((token) => token + 1);
+          }}
+          className="rounded-md bg-anime-purple px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-anime-purple/90"
+        >
+          Retry
+        </button>
       </div>
     );
   }

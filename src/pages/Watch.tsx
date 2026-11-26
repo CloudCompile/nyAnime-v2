@@ -50,6 +50,10 @@ const Watch = () => {
   const [error, setError] = useState<string | null>(null);
   const [showEpisodeList, setShowEpisodeList] = useState(false);
   const [downloadRange, setDownloadRange] = useState({ from: 1, to: 1 });
+  // Bumped by "Try again"; a server reset alone cannot recover a network error.
+  const [retryToken, setRetryToken] = useState(0);
+  // Continue Watching passes `t`; without it the player always restarted.
+  const resumeSeconds = Number(searchParams.get('t') || '0');
 
   const currentEpisode = useMemo(
     () => episodes.find((episode) => episode.number === episodeNumber) ?? episodes[0] ?? null,
@@ -76,10 +80,13 @@ const Watch = () => {
         rememberSlug(info?.dataId, info?.id || slug);
         if (info) document.title = `${info.title} — NyAnime`;
         if (episodeList.length > 0) {
-          setDownloadRange({ from: 1, to: episodeList.length });
           const wanted = Number(searchParams.get('ep') || '1');
           const valid = episodeList.some((episode) => episode.number === wanted);
-          setEpisodeNumber(valid ? wanted : (episodeList[0]?.number ?? 1));
+          const start = valid ? wanted : (episodeList[0]?.number ?? 1);
+          setEpisodeNumber(start);
+          // Default the batch range to the episode on screen. Filling it in
+          // with the whole series meant one stray "Add" queued everything.
+          setDownloadRange({ from: start, to: start });
         }
       } catch (err) {
         if (cancelled) return;
@@ -132,7 +139,7 @@ const Watch = () => {
       cancelled = true;
       controller.abort();
     };
-  }, [currentEpisode, serverName, trackType]);
+  }, [currentEpisode, serverName, trackType, retryToken]);
 
   const selectEpisode = useCallback(
     (number: number) => {
@@ -140,6 +147,8 @@ const Watch = () => {
       setShowEpisodeList(false);
       const next = new URLSearchParams(searchParams);
       next.set('ep', String(number));
+      // A resume timestamp belongs to the episode it was saved for.
+      next.delete('t');
       setSearchParams(next, { replace: true });
     },
     [searchParams, setSearchParams],
@@ -149,13 +158,13 @@ const Watch = () => {
     (seconds: number, duration: number) => {
       if (!anime || duration <= 0) return;
       updateWatchHistory(
-        anime.dataId,
+        anime.dataId || id,
         episodeNumber,
         Math.round((seconds / duration) * 100),
         Math.round(seconds),
       );
     },
-    [anime, episodeNumber],
+    [anime, episodeNumber, id],
   );
 
   const handleSubtitleDelayChange = useCallback(
@@ -190,8 +199,21 @@ const Watch = () => {
   // The server actually in use: an explicit pick, or whichever one the API
   // resolved after falling back past the embed-only default.
   const activeServer = serverName || stream?.server || '';
-  const canPrev = currentEpisode && episodes.some((episode) => episode.number === episodeNumber - 1);
-  const canNext = currentEpisode && episodes.some((episode) => episode.number === episodeNumber + 1);
+  // Navigate by position, not by arithmetic: upstream numbering is not
+  // guaranteed to be contiguous, and a gap disabled both buttons.
+  const currentIndex = currentEpisode
+    ? episodes.findIndex((episode) => episode.number === currentEpisode.number)
+    : -1;
+  const canPrev = currentIndex > 0;
+  const canNext = currentIndex >= 0 && currentIndex < episodes.length - 1;
+  const goPrev = () => {
+    if (currentIndex > 0) selectEpisode(episodes[currentIndex - 1].number);
+  };
+  const goNext = () => {
+    if (currentIndex >= 0 && currentIndex < episodes.length - 1) {
+      selectEpisode(episodes[currentIndex + 1].number);
+    }
+  };
   const embedOnly = Boolean(stream && !stream.file && stream.iframe);
 
   return (
@@ -209,7 +231,9 @@ const Watch = () => {
           {anime && (
             <h1 className="text-lg font-semibold text-white md:text-xl">
               {anime.title}
-              <span className="ml-2 text-white/60">Episode {episodeNumber}</span>
+              <span className="ml-2 text-white/60">
+                Episode {currentEpisode?.number ?? episodeNumber}
+              </span>
             </h1>
           )}
         </div>
@@ -223,9 +247,12 @@ const Watch = () => {
                   <Button
                     className="mt-4"
                     variant="secondary"
-                    onClick={() => setServerName('')}
+                    onClick={() => {
+                      setServerName('');
+                      setRetryToken((token) => token + 1);
+                    }}
                   >
-                    Retry with the default server
+                    Try again
                   </Button>
                 </div>
               </div>
@@ -241,8 +268,8 @@ const Watch = () => {
                 />
                 <div className="flex items-center gap-3 text-sm text-white/70">
                   <span>
-                    {stream.server} only offers an embedded player, which cannot be downloaded.
-                    Choose <strong>Vidplay</strong> for a direct stream.
+                    {stream.server || 'This server'} only offers an embedded player, which cannot be
+                    downloaded. Pick another server from the list for a direct stream.
                   </span>
                   <a
                     className="inline-flex items-center gap-1 text-anime-purple hover:underline"
@@ -261,12 +288,13 @@ const Watch = () => {
               </div>
             ) : stream?.file ? (
               <HlsPlayer
-                key={id}
+                key={`${id}-${currentEpisode?.key ?? episodeNumber}`}
                 src={stream.file}
                 poster={anime?.poster}
+                initialProgress={Number.isFinite(resumeSeconds) ? resumeSeconds : 0}
                 autoPlay
                 onProgress={handleProgress}
-                onEnded={() => canNext && selectEpisode(episodeNumber + 1)}
+                onEnded={goNext}
                 subtitles={stream.tracks}
                 intro={stream.intro}
                 outro={stream.outro}
@@ -284,7 +312,7 @@ const Watch = () => {
                 variant="secondary"
                 size="sm"
                 disabled={!canPrev}
-                onClick={() => selectEpisode(episodeNumber - 1)}
+                onClick={goPrev}
               >
                 <ChevronLeft className="mr-1 h-4 w-4" />
                 Previous
@@ -301,13 +329,18 @@ const Watch = () => {
                 variant="secondary"
                 size="sm"
                 disabled={!canNext}
-                onClick={() => selectEpisode(episodeNumber + 1)}
+                onClick={goNext}
               >
                 Next
                 <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
               <div className="flex-1" />
-              <Button size="sm" onClick={handleDownloadCurrent} disabled={!currentEpisode}>
+              <Button
+                size="sm"
+                onClick={handleDownloadCurrent}
+                disabled={!currentEpisode || !stream?.file}
+                title={!stream?.file ? 'This server only offers an embedded player' : undefined}
+              >
                 <Download className="mr-1 h-4 w-4" />
                 Download episode
               </Button>
@@ -397,7 +430,7 @@ const Watch = () => {
                   <input
                     type="number"
                     min={1}
-                    max={episodes.length || 1}
+                    max={episodes[episodes.length - 1]?.number ?? 1}
                     value={downloadRange.from}
                     onChange={(event) =>
                       setDownloadRange((range) => ({ ...range, from: Number(event.target.value) }))
@@ -410,7 +443,7 @@ const Watch = () => {
                   <input
                     type="number"
                     min={1}
-                    max={episodes.length || 1}
+                    max={episodes[episodes.length - 1]?.number ?? 1}
                     value={downloadRange.to}
                     onChange={(event) =>
                       setDownloadRange((range) => ({ ...range, to: Number(event.target.value) }))

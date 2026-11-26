@@ -22,7 +22,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
-import { addToWatchlist, isInWatchlist } from '@/services/localLibrary';
+import { addToWatchlist, isInWatchlist, removeFromWatchlist } from '@/services/localLibrary';
 
 const AnimeDetails = () => {
   const { id = '' } = useParams();
@@ -54,7 +54,13 @@ const AnimeDetails = () => {
     setSavedToWatchlist(isInWatchlist(id));
   }, [id]);
 
-  const handleAddToWatchlist = () => {
+  const handleToggleWatchlist = () => {
+    if (savedToWatchlist) {
+      removeFromWatchlist(id);
+      setSavedToWatchlist(false);
+      toast({ title: 'Removed from watchlist', description: anime?.title ?? 'Anime removed.' });
+      return;
+    }
     addToWatchlist(id);
     setSavedToWatchlist(true);
     toast({ title: 'Added to watchlist', description: anime?.title ?? 'Anime added.' });
@@ -166,15 +172,11 @@ const AnimeDetails = () => {
                   <Play className="mr-2 h-4 w-4" />
                   Watch now
                 </Button>
-                <Button
-                  variant="secondary"
-                  onClick={handleAddToWatchlist}
-                  disabled={savedToWatchlist}
-                >
+                <Button variant="secondary" onClick={handleToggleWatchlist}>
                   {savedToWatchlist ? (
                     <>
                       <Heart className="mr-2 h-4 w-4" fill="currentColor" />
-                      In watchlist
+                      Remove from watchlist
                     </>
                   ) : (
                     <>
@@ -242,16 +244,26 @@ const AnimeDetails = () => {
                   <p className="text-sm text-white/60">No episodes listed yet.</p>
                 ) : (
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6">
-                    {episodes.map((episode) => (
-                      <Button
-                        key={episode.key}
-                        variant="secondary"
-                        className="justify-start"
-                        onClick={() => navigate(`/anime/${id}/watch?ep=${episode.number}`)}
-                      >
-                        {episode.number}. {episode.title.replace(/^Episode \d+$/, '').trim() || 'Episode'}
-                      </Button>
-                    ))}
+                    {episodes.map((episode) => {
+                      // Titles are often just "Episode 3"; only print a title
+                      // when it actually says something beyond the number.
+                      const cleanTitle = episode.title
+                        .replace(/^Episode\s*\d+\s*/i, '')
+                        .replace(/^[-\u2013:]\s*/, '')
+                        .trim();
+                      return (
+                        <Button
+                          key={episode.key}
+                          variant="secondary"
+                          className="justify-start"
+                          onClick={() => navigate(`/anime/${id}/watch?ep=${episode.number}`)}
+                        >
+                          <span className="truncate">
+                            {cleanTitle ? `${episode.number}. ${cleanTitle}` : `Episode ${episode.number}`}
+                          </span>
+                        </Button>
+                      );
+                    })}
                   </div>
                 )}
               </TabsContent>

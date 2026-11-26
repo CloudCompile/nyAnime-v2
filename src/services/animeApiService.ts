@@ -352,24 +352,38 @@ export async function getEpisodes(id: string, signal?: AbortSignal): Promise<Epi
     await getJson(`/api/episodes/${encodeURIComponent(id)}`, signal),
   ) ?? {}) as { episodes?: unknown };
   if (!Array.isArray(data.episodes)) return [];
+  const seen = new Set<number>();
   return data.episodes
-    .map((row) => {
+    .map((row, index) => {
       const record = (row ?? {}) as Record<string, unknown>;
       const fullId = pick(record, 'id');
       // Prefer the composite `<dataId>_<n>` key the stream route expects.
       const key = fullId.includes('?ep=') ? fullId.split('?ep=')[1] : fullId;
+      // The API used to call this field `episode_no` and now sends `number`.
+      // Read both, then fall back to the row's position so a missing field can
+      // never render every episode as "0".
+      const number =
+        asNumber(record.number) || asNumber(record.episode_no) || index + 1;
       return {
         key,
         id: fullId,
-        number: asNumber(record.episode_no),
-        title: pick(record, 'title') || `Episode ${asNumber(record.episode_no)}`,
+        number,
+        title: pick(record, 'title') || `Episode ${number}`,
         japaneseTitle: pick(record, 'japanese_title') || undefined,
         filler: Boolean(record.filler),
         subbed: record.subbed !== false,
         dubbed: Boolean(record.dubbed),
       };
     })
-    .filter((episode) => episode.key);
+    .filter((episode) => episode.key)
+    // Sub and dub listings can repeat the same episode number; the grid and
+    // the download range expect one entry per episode.
+    .filter((episode) => {
+      if (seen.has(episode.number)) return false;
+      seen.add(episode.number);
+      return true;
+    })
+    .sort((a, b) => a.number - b.number);
 }
 
 export async function getServers(episodeKey: string, signal?: AbortSignal): Promise<ServerOption[]> {

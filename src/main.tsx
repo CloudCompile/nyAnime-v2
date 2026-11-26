@@ -17,6 +17,14 @@ const queryClient = new QueryClient({
   },
 });
 
+// The service worker is required for the Quest "Add to your library" flow.
+// It is skipped in development so Vite's HMR is never served from a cache.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+  });
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>

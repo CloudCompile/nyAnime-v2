@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Play, ChevronRight, X } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
@@ -107,9 +107,9 @@ const ContinueWatching = () => {
             <div className="mr-3 h-6 w-2 rounded-full bg-anime-purple" />
             <h2 className="text-xl font-semibold text-white">Continue Watching</h2>
           </div>
-          <a href="/library" className="flex items-center text-sm text-anime-purple hover:underline">
+          <Link to="/library" className="flex items-center text-sm text-anime-purple hover:underline">
             View All <ChevronRight className="h-4 w-4" />
-          </a>
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -132,6 +132,7 @@ const ContinueWatching = () => {
                 <div className="absolute right-2 top-2 flex space-x-2">
                   <Button
                     size="sm"
+                    aria-label={`Remove ${item.title} from Continue Watching`}
                     className="h-8 w-8 rounded-full bg-red-500/80 p-0 hover:bg-red-500"
                     onClick={(event) => handleRemoveItem(item.id, event)}
                   >
@@ -139,6 +140,7 @@ const ContinueWatching = () => {
                   </Button>
                   <Button
                     size="sm"
+                    aria-label={`Continue ${item.title} episode ${item.episode}`}
                     className="h-8 w-8 rounded-full bg-anime-purple p-0 hover:bg-anime-purple/90"
                     onClick={(event) => {
                       event.stopPropagation();

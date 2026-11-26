@@ -133,6 +133,26 @@ export const useAnimeSearch = (
 };
 
 /**
+ * The whole catalogue, page by page. `/api/filter` with no filters lists every
+ * title, which is what the "All Anime" page claims to show — it used to show
+ * only the trending and popular rows stitched together.
+ */
+export const useCatalogue = (page = 1, enabled = true) => {
+  return useQuery({
+    queryKey: ['catalogue', page],
+    queryFn: async () => {
+      const result = await filterAnime({ page });
+      return {
+        anime: result.items.map(toAnimeData),
+        pagination: { hasNextPage: result.hasNextPage, totalPages: result.totalPages },
+      };
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled,
+  });
+};
+
+/**
  * Resolve a route id to the catalogue slug. A slug is used as-is; a numeric id
  * is looked up in the local cache first, and only falls back to a request when
  * the slug has never been seen.

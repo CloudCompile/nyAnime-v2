@@ -80,6 +80,13 @@
     @apply bg-anime-darker text-foreground antialiased;
     font-feature-settings: "ss01", "ss02", "cv01", "cv02", "cv03";
   }
+
+  /* A visible focus ring for keyboard and D-pad navigation. TV browsers move
+     focus with the remote and have no pointer to reveal hover styles. */
+  :focus-visible {
+    outline: 2px solid #a78bfa;
+    outline-offset: 2px;
+  }
 }
 
 @layer components {

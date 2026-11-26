@@ -1,8 +1,8 @@
-
-import React, { useState } from 'react';
-import { Play, Star, Calendar, Clock, List, Heart } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { toast } from '@/hooks/use-toast';
+import React, { useEffect, useState } from "react";
+import { Play, Star, Calendar, List, Heart } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "@/hooks/use-toast";
+import { isFavorite as isStoredFavorite, toggleFavorite } from "@/services/localLibrary";
 
 interface AnimeCardProps {
   id: string;
@@ -16,148 +16,158 @@ interface AnimeCardProps {
   progress?: number;
 }
 
-const AnimeCard = ({ 
-  id, 
-  title, 
-  image, 
-  category, 
-  rating, 
-  year, 
-  episodes, 
+const AnimeCard = ({
+  id,
+  title,
+  image,
+  category,
+  rating,
+  year,
+  episodes,
   compact = false,
-  progress
+  progress,
 }: AnimeCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
-  const [isFavorite, setIsFavorite] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(() => isStoredFavorite(id));
   const navigate = useNavigate();
 
-  const handleClick = () => {
-    navigate(`/anime/${id}`);
+  useEffect(() => {
+    setIsFavorite(isStoredFavorite(id));
+  }, [id]);
+
+  const openDetails = () => navigate(`/anime/${id}`);
+
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openDetails();
+    }
   };
 
-  const handlePlay = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handlePlay = (event: React.MouseEvent) => {
+    event.stopPropagation();
     navigate(`/anime/${id}/watch`);
   };
 
-  const handleFavorite = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsFavorite(!isFavorite);
+  const handleFavorite = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    const nowFavorite = !isFavorite;
+    toggleFavorite(id);
+    setIsFavorite(nowFavorite);
     toast({
-      title: isFavorite ? "Removed from favorites" : "Added to favorites",
-      description: `${title} has been ${isFavorite ? "removed from" : "added to"} your favorites`,
+      title: nowFavorite ? "Added to favorites" : "Removed from favorites",
+      description: nowFavorite
+        ? `${title} is in your favorites`
+        : `${title} was removed from your favorites`,
       duration: 3000,
     });
   };
 
-  const handleCategoryClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    // Extract the first genre if multiple are present
-    const firstGenre = category.split(',')[0].trim();
+  const firstGenre = category.split(",")[0].trim() || "Anime";
+
+  const handleCategoryClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
     navigate(`/anime?genre=${encodeURIComponent(firstGenre)}`);
   };
 
   return (
-    <div 
-      className={`group relative overflow-hidden ${compact ? 'rounded-lg' : 'rounded-xl'} transition-transform duration-300 ease-out ${
-        isHovered ? 'transform scale-[1.03] shadow-lg' : ''
-      }`}
+    <div
+      className={`group relative cursor-pointer overflow-hidden transition-transform duration-300 ease-out ${
+        compact ? "rounded-lg" : "rounded-xl"
+      } ${isHovered ? "shadow-lg" : ""}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      onClick={handleClick}
+      onClick={openDetails}
+      onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
       aria-label={`View details for ${title}`}
     >
-      {/* Background Image */}
-      <div 
-        className="w-full h-full"
+      <div
+        className="w-full"
+        role="img"
+        aria-label={title}
         style={{
-          aspectRatio: compact ? '16/10' : '2/3',
+          aspectRatio: compact ? "16/10" : "2/3",
           backgroundImage: `url(${image})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'top center', // Changed from 'center' to 'top center'
+          backgroundSize: "cover",
+          backgroundPosition: "top center",
         }}
       />
-      
-      {/* Progress bar (if progress exists) */}
+
       {progress !== undefined && progress > 0 && (
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/30">
-          <div 
-            className="h-full bg-anime-purple" 
-            style={{ width: `${progress}%` }}
-          />
+        <div className="absolute bottom-0 left-0 right-0 z-20 h-1 bg-black/30">
+          <div className="h-full bg-anime-purple" style={{ width: `${progress}%` }} />
         </div>
       )}
-      
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-100" />
-      
-      {/* Content */}
+
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+
       <div className="absolute inset-0 flex flex-col justify-end p-3 md:p-4">
-        {/* Title and Rating */}
-        <h3 className="text-white font-semibold text-sm md:text-base line-clamp-2 mb-1">{title}</h3>
-        <div className="flex items-center justify-between text-xs">
-          <span 
-            className="text-white/70 cursor-pointer hover:text-white"
+        <h3 className="mb-1 line-clamp-2 text-sm font-semibold text-white md:text-base">{title}</h3>
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span
+            className="cursor-pointer truncate text-white/70 hover:text-white"
             onClick={handleCategoryClick}
           >
-            {category.split(',')[0].trim()}
+            {firstGenre}
           </span>
-          <div className="flex items-center">
-            <Star className="h-3 w-3 text-yellow-400 mr-1" fill="currentColor" />
+          <div className="flex shrink-0 items-center">
+            <Star className="mr-1 h-3 w-3 text-yellow-400" fill="currentColor" />
             <span className="text-white">{rating}</span>
           </div>
         </div>
       </div>
-      
-      {/* Hover Effect */}
-      <div 
-        className={`absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col justify-center items-center p-4 transition-opacity duration-300 ${
-          isHovered ? 'opacity-100' : 'opacity-0'
+
+      {/* Favourites stay reachable without hover: a touch screen and a TV
+          remote never fire mouseenter. */}
+      <button
+        type="button"
+        onClick={handleFavorite}
+        aria-label={isFavorite ? `Remove ${title} from favorites` : `Add ${title} to favorites`}
+        aria-pressed={isFavorite}
+        className="absolute right-2 top-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 transition-colors hover:bg-black/75"
+      >
+        <Heart
+          className={`h-4 w-4 ${isFavorite ? "text-red-500" : "text-white"}`}
+          fill={isFavorite ? "currentColor" : "none"}
+        />
+      </button>
+
+      <div
+        className={`absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/70 p-3 backdrop-blur-sm transition-opacity duration-300 ${
+          isHovered ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       >
-        <button 
-          className="w-12 h-12 rounded-full bg-anime-purple flex items-center justify-center mb-3 animate-scale-up"
+        <button
+          type="button"
           onClick={handlePlay}
+          aria-label={`Play ${title}`}
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-anime-purple transition-colors hover:bg-anime-purple/90"
         >
           <Play className="h-5 w-5 text-white" fill="currentColor" />
         </button>
-        <h3 className="text-white font-semibold text-center mb-1">{title}</h3>
-        <div className="flex flex-wrap items-center justify-center gap-2 text-xs mb-2">
-          <div className="flex items-center text-white/70">
-            <Calendar className="h-3 w-3 mr-1" />
-            <span>{year}</span>
+        <h3 className="line-clamp-2 text-center text-sm font-semibold text-white">{title}</h3>
+        {!compact && (
+          <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
+            <span className="flex items-center text-white/70">
+              <Calendar className="mr-1 h-3 w-3" />
+              {year}
+            </span>
+            {episodes ? (
+              <span className="flex items-center text-white/70">
+                <List className="mr-1 h-3 w-3" />
+                {episodes} episodes
+              </span>
+            ) : null}
           </div>
-          {episodes && (
-            <div className="flex items-center text-white/70">
-              <List className="h-3 w-3 mr-1" />
-              <span>{episodes} Episodes</span>
-            </div>
-          )}
-          <div className="flex items-center text-white/70">
-            <Clock className="h-3 w-3 mr-1" />
-            <span>24 min/ep</span>
-          </div>
-        </div>
-        <div 
-          className="inline-flex items-center bg-white/10 px-3 py-1 rounded-full cursor-pointer hover:bg-anime-purple/20 transition-colors"
+        )}
+        <button
+          type="button"
           onClick={handleCategoryClick}
+          className="max-w-full truncate rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-anime-purple/20"
         >
-          <span className="text-xs font-medium text-white">{category.split(',')[0].trim()}</span>
-        </div>
-        
-        {/* Favorite button */}
-        <button 
-          onClick={handleFavorite}
-          className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center transition-colors hover:bg-black/70"
-          aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
-        >
-          <Heart 
-            className={`h-4 w-4 ${isFavorite ? 'text-red-500' : 'text-white'}`} 
-            fill={isFavorite ? "currentColor" : "none"}
-          />
+          {firstGenre}
         </button>
       </div>
     </div>

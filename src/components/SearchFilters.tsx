@@ -1,19 +1,16 @@
+import React, { useState } from "react";
+import { Search, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useGenres } from "../hooks/useAnimeData";
 
-import React, { useState, useEffect } from 'react';
-import { Search, Filter, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Slider } from '@/components/ui/slider';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Separator } from '@/components/ui/separator';
-import { useGenres } from '../hooks/useAnimeData';
+// Generate years for the dropdown (current year down to 1990)
+const years = Array.from({ length: new Date().getFullYear() - 1989 }, (_, i) =>
+  (new Date().getFullYear() - i).toString(),
+);
 
-// Generate years for dropdown (current year down to 1990)
-const years = Array.from({ length: new Date().getFullYear() - 1989 }, (_, i) => (new Date().getFullYear() - i).toString());
-
-const statuses = ['Airing', 'Completed', 'Upcoming'];
+const statuses = ["Airing", "Completed", "Upcoming"];
 
 interface SearchFiltersProps {
   onSearch: (filters: SearchFilters) => void;
@@ -24,180 +21,154 @@ export interface SearchFilters {
   genres: string[];
   year: string | null;
   status: string | null;
-  rating: [number, number]; // Min and Max rating
 }
 
+/**
+ * Catalogue filters, laid out inline.
+ *
+ * They used to live behind a second popover trigger inside the "Filters" panel,
+ * so the panel looked like a lone search box and most visitors never saw a
+ * genre picker at all. They are now visible as soon as the panel opens.
+ *
+ * Genres are single-select because the API's filter takes one `genres` value;
+ * a multi-select UI would silently drop every choice but the first. The rating
+ * slider was removed for the same reason — the API has no rating parameter, so
+ * it never filtered anything.
+ */
 export const SearchFilters = ({ onSearch }: SearchFiltersProps) => {
-  const [isOpen, setIsOpen] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>({
-    query: '',
+    query: "",
     genres: [],
     year: null,
     status: null,
-    rating: [0, 10]
   });
 
-  // Fetch genres from the API
   const { data: genreList = [] } = useGenres();
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearchSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
     onSearch(filters);
   };
 
-  const handleReset = () => {
-    setFilters({
-      query: '',
-      genres: [],
-      year: null,
-      status: null,
-      rating: [0, 10]
-    });
+  const toggleGenre = (genre: string) => {
+    setFilters((previous) => ({
+      ...previous,
+      genres: previous.genres.includes(genre) ? [] : [genre],
+    }));
   };
 
-  const toggleGenre = (genre: string) => {
-    setFilters(prev => {
-      if (prev.genres.includes(genre)) {
-        return { ...prev, genres: prev.genres.filter(g => g !== genre) };
-      } else {
-        return { ...prev, genres: [...prev.genres, genre] };
-      }
-    });
+  const handleReset = () => {
+    const cleared: SearchFilters = { query: "", genres: [], year: null, status: null };
+    setFilters(cleared);
+    onSearch(cleared);
   };
+
+  const activeCount =
+    filters.genres.length + (filters.year ? 1 : 0) + (filters.status ? 1 : 0);
 
   return (
-    <div className="w-full mb-8">
-      <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
+    <form onSubmit={handleSearchSubmit} className="w-full space-y-4">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-white/50" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
           <Input
             type="text"
             placeholder="Search anime..."
             value={filters.query}
-            onChange={(e) => setFilters({ ...filters, query: e.target.value })}
-            className="pl-9 border-white/10 text-white"
+            onChange={(event) => setFilters({ ...filters, query: event.target.value })}
+            className="border-white/10 pl-9 text-white"
           />
         </div>
-        
-        <Popover open={isOpen} onOpenChange={setIsOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="border-white/10 text-white hover:bg-white/10">
-              <Filter className="h-4 w-4 mr-2" />
-              Filters {filters.genres.length > 0 || filters.year || filters.status || filters.rating[0] > 0 || filters.rating[1] < 10 ? 
-                <span className="ml-1 w-5 h-5 rounded-full bg-anime-purple text-white text-xs flex items-center justify-center">
-                  {filters.genres.length + (filters.year ? 1 : 0) + (filters.status ? 1 : 0) + (filters.rating[0] > 0 || filters.rating[1] < 10 ? 1 : 0)}
-                </span> : null
-              }
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80 md:w-96 border-white/10 text-white p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium">Filter Anime</h3>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={handleReset}
-                className="h-8 text-white/70 hover:text-white hover:bg-white/10"
+        <Button type="submit" className="shrink-0 bg-anime-purple hover:bg-anime-purple/90">
+          Apply filters{activeCount > 0 ? ` (${activeCount})` : ""}
+        </Button>
+      </div>
+
+      <div>
+        <p className="mb-2 text-sm text-white/70">Genre</p>
+        <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto pr-1">
+          {genreList.length === 0 && (
+            <p className="text-xs text-white/50">Genres are still loading…</p>
+          )}
+          {genreList.map((genre) => {
+            const selected = filters.genres.includes(genre);
+            return (
+              <button
+                key={genre}
+                type="button"
+                onClick={() => toggleGenre(genre)}
+                aria-pressed={selected}
+                className={`rounded-full px-3 py-1 text-xs transition-colors ${
+                  selected
+                    ? "bg-anime-purple text-white"
+                    : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+                }`}
               >
-                <X className="h-3 w-3 mr-1" /> Reset
-              </Button>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-white/70 mb-2 block">Genres</label>
-                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-2">
-                  {genreList.map(genre => (
-                    <label 
-                      key={genre} 
-                      className={`px-3 py-1 rounded-full text-xs cursor-pointer transition-colors ${
-                        filters.genres.includes(genre) 
-                          ? 'bg-anime-purple text-white' 
-                          : 'bg-white/10 text-white/70 hover:bg-white/20'
-                      }`}
-                    >
-                      <Checkbox 
-                        checked={filters.genres.includes(genre)}
-                        onCheckedChange={() => toggleGenre(genre)}
-                        className="sr-only"
-                      />
-                      {genre}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-white/70 mb-2 block">Year</label>
-                  <Select 
-                    value={filters.year || undefined} 
-                    onValueChange={(value) => setFilters({ ...filters, year: value })}
-                  >
-                    <SelectTrigger className="border-white/10 text-white">
-                      <SelectValue placeholder="Any Year" />
-                    </SelectTrigger>
-                    <SelectContent className="border-white/10 text-white">
-                      <SelectItem value="">Any Year</SelectItem>
-                      {years.map(year => (
-                        <SelectItem key={year} value={year}>{year}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div>
-                  <label className="text-sm text-white/70 mb-2 block">Status</label>
-                  <Select 
-                    value={filters.status || undefined} 
-                    onValueChange={(value) => setFilters({ ...filters, status: value })}
-                  >
-                    <SelectTrigger className="border-white/10 text-white">
-                      <SelectValue placeholder="Any Status" />
-                    </SelectTrigger>
-                    <SelectContent className="border-white/10 text-white">
-                      <SelectItem value="">Any Status</SelectItem>
-                      {statuses.map(status => (
-                        <SelectItem key={status} value={status}>{status}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm text-white/70">Rating Range</label>
-                  <span className="text-xs text-white/70">{filters.rating[0]} - {filters.rating[1]}</span>
-                </div>
-                <Slider 
-                  defaultValue={[0, 10]} 
-                  min={0} 
-                  max={10} 
-                  step={0.5} 
-                  value={filters.rating}
-                  onValueChange={(value) => setFilters({ ...filters, rating: value as [number, number] })}
-                  className="mt-2"
-                />
-              </div>
-            </div>
-            
-            <Separator className="my-4 bg-white/10" />
-            
-            <div className="flex justify-end">
-              <Button 
-                onClick={() => {
-                  onSearch(filters);
-                  setIsOpen(false);
-                }}
-                className="bg-anime-purple hover:bg-anime-purple/90"
-              >
-                Apply Filters
-              </Button>
-            </div>
-          </PopoverContent>
-        </Popover>
-      </form>
-    </div>
+                {genre}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="text-sm text-white/70">
+          Year
+          <Select
+            value={filters.year || "any"}
+            onValueChange={(value) =>
+              setFilters({ ...filters, year: value === "any" ? null : value })
+            }
+          >
+            <SelectTrigger className="mt-1 border-white/10 text-white">
+              <SelectValue placeholder="Any year" />
+            </SelectTrigger>
+            <SelectContent className="border-white/10 text-white">
+              <SelectItem value="any">Any year</SelectItem>
+              {years.map((year) => (
+                <SelectItem key={year} value={year}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+
+        <label className="text-sm text-white/70">
+          Status
+          <Select
+            value={filters.status || "any"}
+            onValueChange={(value) =>
+              setFilters({ ...filters, status: value === "any" ? null : value })
+            }
+          >
+            <SelectTrigger className="mt-1 border-white/10 text-white">
+              <SelectValue placeholder="Any status" />
+            </SelectTrigger>
+            <SelectContent className="border-white/10 text-white">
+              <SelectItem value="any">Any status</SelectItem>
+              {statuses.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {status}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+      </div>
+
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={handleReset}
+          className="text-white/70 hover:bg-white/10 hover:text-white"
+        >
+          <RotateCcw className="mr-1 h-3.5 w-3.5" />
+          Reset
+        </Button>
+      </div>
+    </form>
   );
 };

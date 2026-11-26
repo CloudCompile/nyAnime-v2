@@ -1,16 +1,14 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight, Play } from 'lucide-react';
 import Header from '../components/Header';
 import CategoryRow from '../components/CategoryRow';
-import AnimeGrid from '../components/AnimeGrid';
 import ContinueWatching from '../components/ContinueWatching';
 import DownloadPanel from '../components/DownloadPanel';
+import QuestInstallPrompt from '../components/QuestInstallPrompt';
 import { useHomeData, usePopularAnime, useSeasonalAnime, useTrendingAnime, type AnimeData } from '../hooks/useAnimeData';
 import { GridSkeleton } from '../components/LoadingSkeletons';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { GlassSurface } from '@/components/ui/glass-surface';
 
 const asCardList = (items: AnimeData[]) =>
   items.map((item) => ({
@@ -44,7 +42,9 @@ const Hero = ({ spotlight }: { spotlight?: AnimeData }) => {
       />
       <div className="relative z-10 flex h-full flex-col justify-end">
         <div className="container mx-auto px-4 pb-16 md:px-6 md:pb-20">
-          <GlassSurface className="max-w-3xl rounded-2xl p-6">
+          {/* A plain translucent panel. The WebGL glass surface rendered as an
+              opaque white card over the artwork in practice. */}
+          <div className="max-w-3xl rounded-2xl border border-white/15 bg-black/55 p-6 shadow-lg backdrop-blur-md">
             <span className="mb-3 inline-block rounded-full bg-anime-purple/20 px-3 py-1 text-xs font-medium text-white">
               Spotlight
             </span>
@@ -53,7 +53,9 @@ const Hero = ({ spotlight }: { spotlight?: AnimeData }) => {
             </h1>
             {spotlight.synopsis && (
               <p className="mb-6 max-w-2xl text-sm text-white/80 md:text-base">
-                {spotlight.synopsis.slice(0, 220)}…
+                {spotlight.synopsis.length > 220
+                  ? `${spotlight.synopsis.slice(0, 220)}…`
+                  : spotlight.synopsis}
               </p>
             )}
             <div className="flex flex-wrap gap-3">
@@ -70,7 +72,7 @@ const Hero = ({ spotlight }: { spotlight?: AnimeData }) => {
                 </Link>
               </Button>
             </div>
-          </GlassSurface>
+          </div>
         </div>
       </div>
     </section>
@@ -82,8 +84,6 @@ const Index = () => {
   const { data: trending = [], isLoading: trendingLoading } = useTrendingAnime();
   const { data: popular = [], isLoading: popularLoading } = usePopularAnime();
   const { data: seasonal = [] } = useSeasonalAnime();
-  const [activeTab, setActiveTab] = useState('trending');
-
   const spotlight = useMemo(() => {
     const first = home?.spotlights?.[0];
     if (!first) return undefined;
@@ -112,6 +112,7 @@ const Index = () => {
 
       <main>
         <Hero spotlight={spotlight} />
+        <QuestInstallPrompt />
         <ContinueWatching />
 
         {isLoading ? (
@@ -128,24 +129,6 @@ const Index = () => {
             )}
           </>
         )}
-
-        <section className="py-8">
-          <div className="container mx-auto px-4 md:px-6">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <div className="mb-5 flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-white">Browse</h2>
-                <TabsList>
-                  <TabsTrigger value="trending">Trending</TabsTrigger>
-                  <TabsTrigger value="popular">Popular</TabsTrigger>
-                </TabsList>
-              </div>
-            </Tabs>
-            <AnimeGrid
-              title=""
-              animeList={asCardList(activeTab === 'trending' ? trending.slice(0, 15) : popular.slice(0, 15))}
-            />
-          </div>
-        </section>
 
         <section className="container mx-auto px-4 pb-12 md:px-6">
           <DownloadPanel />

@@ -143,6 +143,11 @@ function write(library: Library): Library {
   } catch {
     // A full or disabled storage still lets the session work in memory.
   }
+  // Pages that render the library (Library, Continue Watching) listen for this
+  // so a favourite toggled from a card disappears without a reload.
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nyanime:library-changed'));
+  }
   return library;
 }
 
@@ -169,6 +174,10 @@ export function getLibrary(): Library {
 
 export function isInWatchlist(animeId: string): boolean {
   return getLibrary().watchlist.some((entry) => entry.animeId === String(animeId));
+}
+
+export function isFavorite(animeId: string): boolean {
+  return getLibrary().favorites.some((entry) => entry.animeId === String(animeId));
 }
 
 export function addToWatchlist(animeId: string): Library {

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -11,6 +12,9 @@ import Library from "./pages/Library";
 import AnimeList from "./pages/AnimeList";
 import NetworkStatus from "./components/NetworkStatus";
 import { LiquidGlassDefs } from "./components/ui/liquid-glass";
+
+// three.js lives only on the theater route, so the main bundle stays small.
+const VrTheater = lazy(() => import("./pages/VrTheater"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,6 +43,20 @@ const App = () => (
           <Route path="/anime/:id" element={<AnimeDetails />} />
           <Route path="/anime/:id/watch" element={<Watch />} />
           <Route path="/library" element={<Library />} />
+          <Route
+            path="/vr"
+            element={
+              <Suspense
+                fallback={
+                  <div className="flex min-h-screen items-center justify-center bg-anime-darker text-white/70">
+                    Loading theater…
+                  </div>
+                }
+              >
+                <VrTheater />
+              </Suspense>
+            }
+          />
           {/* Old bookmarks and links to the removed account pages. */}
           <Route path="/profile" element={<Navigate to="/library" replace />} />
           <Route path="/settings" element={<Navigate to="/library" replace />} />
