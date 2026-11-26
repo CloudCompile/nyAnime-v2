@@ -160,9 +160,21 @@ const VrTheater = () => {
       // rendition instead of letting ABR ramp up from its 500 kbps default.
       hls.config.capLevelToPlayerSize = false;
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (hls && hls.levels.length > 0) {
-          hls.currentLevel = hls.levels.length - 1;
-        }
+        const instance = hls;
+        if (!instance || instance.levels.length === 0) return;
+        // Manifests are not ordered low-to-high (this one is 1080p, 720p,
+        // 480p), so pick the tallest rendition rather than the last one.
+        let bestIndex = 0;
+        instance.levels.forEach((level, index) => {
+          const winner = instance.levels[bestIndex];
+          if (
+            level.height > winner.height ||
+            (level.height === winner.height && level.bitrate > winner.bitrate)
+          ) {
+            bestIndex = index;
+          }
+        });
+        instance.currentLevel = bestIndex;
       });
       hls.loadSource(source);
       hls.attachMedia(video);
