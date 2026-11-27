@@ -53,6 +53,23 @@ const DELAY_STEP_SECONDS = 0.25;
 const NEXT_UP_SECONDS = 10;
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 
+/**
+ * Document Picture-in-Picture (Chrome/Edge 116+) is missing from this
+ * TypeScript DOM lib. It is the only PiP variant that can show subtitles on
+ * Chromium: the browser's own PiP window paints the video frame and nothing
+ * else, so a native text track is dropped on the way out.
+ */
+interface DocumentPipApi {
+  requestWindow(options?: { width?: number; height?: number }): Promise<Window>;
+  readonly window: Window | null;
+}
+
+function documentPip(): DocumentPipApi | null {
+  const api = (window as unknown as { documentPictureInPicture?: DocumentPipApi })
+    .documentPictureInPicture;
+  return api ?? null;
+}
+
 const formatTime = (seconds: number): string => {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
   const total = Math.floor(seconds);
@@ -97,6 +114,9 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
   const appliedProgressRef = useRef(false);
   const hideTimerRef = useRef<number | null>(null);
   const blobUrlRef = useRef<string | null>(null);
+  const pipWindowRef = useRef<Window | null>(null);
+  const pipCaptionRef = useRef<HTMLDivElement | null>(null);
+  const pipPlaceholderRef = useRef<HTMLElement | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,7 +139,8 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
   const [theaterBusy, setTheaterBusy] = useState(false);
   const [theaterError, setTheaterError] = useState<string | null>(null);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [pipSupported, setPipSupported] = useState(false);
+  const [pipMode, setPipMode] = useState<'document' | 'video' | null>(null);
+  const [docPipActive, setDocPipActive] = useState(false);
   const [showNextUp, setShowNextUp] = useState(false);
   const [nextUpCountdown, setNextUpCountdown] = useState(NEXT_UP_SECONDS);
   // Preloaded so the VR click can request the session synchronously, without
@@ -129,21 +150,46 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
   const playableSrc = useMemo(() => maybeProxy(src), [src]);
 
   // Picture-in-picture is a browser capability, not a given; the control only
-  // exists where the API does.
+  // exists where the API does. Document PiP is preferred because it is the only
+  // variant that can carry subtitles on Chromium.
   useEffect(() => {
-    setPipSupported(Boolean(document.pictureInPictureEnabled));
+    if (documentPip()) setPipMode('document');
+    else if (document.pictureInPictureEnabled) setPipMode('video');
   }, []);
 
   const subtitleTracks = useMemo(
     () =>
       subtitles
-        .filter((track) => track.file)
+        // `thumbnails` is a trick-play sprite sheet, not dialogue, and a track
+        // without a file cannot be fetched at all.
+        .filter(
+          (track) =>
+            track.file &&
+            (!track.kind || track.kind === 'captions' || track.kind === 'subtitles'),
+        )
         .map((track, index) => ({
+          // The caption hosts only answer the player that listed them, so they
+          // go through the same proxy as the playlists.
           url: maybeProxy(track.file),
           label: track.label || `Track ${index + 1}`,
+          isDefault: Boolean(track.default),
         })),
     [subtitles],
   );
+
+  // Sources list tracks in their own order (Arabic first on some episodes), so
+  // open on English — or the track the source marks default — rather than on
+  // whatever happens to be first.
+  useEffect(() => {
+    if (subtitleTracks.length === 0) {
+      setActiveSubtitle(0);
+      return;
+    }
+    const english = subtitleTracks.findIndex((track) => /^english\b/i.test(track.label));
+    const marked = subtitleTracks.findIndex((track) => track.isDefault);
+    const preferred = english >= 0 ? english : marked >= 0 ? marked : 0;
+    setActiveSubtitle((current) => (current === preferred ? current : preferred));
+  }, [subtitleTracks]);
 
   // --- media source -------------------------------------------------------
   useEffect(() => {
@@ -290,6 +336,8 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
   useEffect(
     () => () => {
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+      // A window left open would hold the video element it adopted.
+      pipWindowRef.current?.close();
     },
     [],
   );
@@ -378,11 +426,80 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
   const togglePictureInPicture = useCallback(async () => {
     const video = videoRef.current;
     if (!video) return;
+
+    // An open window of either kind is closed rather than replaced.
+    if (pipWindowRef.current) {
+      pipWindowRef.current.close();
+      return;
+    }
+    if (document.pictureInPictureElement) {
+      await document.exitPictureInPicture().catch(() => undefined);
+      return;
+    }
+
+    const api = documentPip();
+    if (!api) {
+      // Safari and Firefox already paint WebVTT captions in their own PiP, and
+      // Chromium without Document PiP has no other option.
+      try {
+        await video.requestPictureInPicture();
+      } catch {
+        // The browser can refuse while a stream is loading; nothing to report.
+      }
+      return;
+    }
+
     try {
-      if (document.pictureInPictureElement) await document.exitPictureInPicture();
-      else await video.requestPictureInPicture();
+      const pipWindow = await api.requestWindow({ width: 480, height: 270 });
+      // None of the page's stylesheets reach a Document PiP window, so the
+      // video and the caption layer carry their own inline styles.
+      const doc = pipWindow.document;
+      doc.title = 'NyAnime';
+      const style = doc.createElement('style');
+      style.textContent = [
+        'html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }',
+        'body { position: relative; display: flex; align-items: center; justify-content: center; }',
+        'video { width: 100%; height: 100%; object-fit: contain; display: block; cursor: pointer; }',
+        '#nyanime-pip-captions {',
+        '  position: absolute; left: 4%; right: 4%; bottom: 5%;',
+        '  color: #fff; text-align: center; white-space: pre-line; pointer-events: none;',
+        '  font: 600 clamp(13px, 4.4vh, 26px)/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;',
+        '  text-shadow: 0 2px 6px rgba(0,0,0,.95), 0 0 2px rgba(0,0,0,.9);',
+        '}',
+      ].join('\n');
+      doc.head.appendChild(style);
+
+      // React's synthetic media events are delegated from the app root, and the
+      // video is about to leave it. A marker keeps the player's layout intact
+      // while the effect below mirrors those events natively.
+      const placeholder = document.createElement('div');
+      placeholder.className =
+        'flex h-full w-full items-center justify-center text-xs text-white/60';
+      placeholder.textContent = 'Playing in picture-in-picture';
+      video.parentElement?.insertBefore(placeholder, video);
+      pipPlaceholderRef.current = placeholder;
+
+      const captions = doc.createElement('div');
+      captions.id = 'nyanime-pip-captions';
+      captions.style.display = 'none';
+      doc.body.append(video, captions);
+      pipCaptionRef.current = captions;
+      pipWindowRef.current = pipWindow;
+
+      // Closing the window (or pressing Esc) is the only way back, so the
+      // element is re-homed from the pagehide handler.
+      pipWindow.addEventListener('pagehide', () => {
+        const marker = pipPlaceholderRef.current;
+        if (marker?.isConnected) marker.replaceWith(video);
+        pipPlaceholderRef.current = null;
+        pipCaptionRef.current = null;
+        pipWindowRef.current = null;
+        setDocPipActive(false);
+      });
+
+      setDocPipActive(true);
     } catch {
-      // The browser can refuse while a stream is loading; nothing to report.
+      // No user activation, or the API is disabled by policy.
     }
   }, []);
 
@@ -486,6 +603,15 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
     }
   }, [onProgress]);
 
+  const handlePlay = useCallback(() => {
+    setIsPlaying(true);
+    setShowNextUp(false);
+  }, []);
+
+  const handlePause = useCallback(() => setIsPlaying(false), []);
+  const handleWaiting = useCallback(() => setIsLoading(true), []);
+  const handlePlaying = useCallback(() => setIsLoading(false), []);
+
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -537,6 +663,84 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
   const handleScrub = (event: React.ChangeEvent<HTMLInputElement>) => {
     seekTo(Number(event.target.value));
   };
+
+  // While the video sits in the PiP document it is outside React's root, so its
+  // synthetic media events stop arriving. Mirror the ones the player depends
+  // on, and let a click toggle playback because the custom control bar is not
+  // part of that window.
+  useEffect(() => {
+    if (!docPipActive) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const onClick = () => {
+      if (video.paused) void video.play().catch(() => undefined);
+      else video.pause();
+    };
+    const listeners: Array<[string, EventListener]> = [
+      ['loadedmetadata', handleLoadedMetadata],
+      ['durationchange', handleLoadedMetadata],
+      ['timeupdate', handleTimeUpdate],
+      ['play', handlePlay],
+      ['pause', handlePause],
+      ['waiting', handleWaiting],
+      ['playing', handlePlaying],
+      ['ended', handleEnded],
+      ['click', onClick],
+    ];
+    listeners.forEach(([event, listener]) => video.addEventListener(event, listener));
+    return () =>
+      listeners.forEach(([event, listener]) => video.removeEventListener(event, listener));
+  }, [
+    docPipActive,
+    handleLoadedMetadata,
+    handleTimeUpdate,
+    handlePlay,
+    handlePause,
+    handleWaiting,
+    handlePlaying,
+    handleEnded,
+  ]);
+
+  // Paint the active cues into the PiP window. The browser's own renderer is
+  // hidden while the video is out (Chromium paints nothing in PiP anyway, and
+  // browsers that do would double up with this layer).
+  useEffect(() => {
+    if (!docPipActive) return;
+    const video = videoRef.current;
+    const caption = pipCaptionRef.current;
+    if (!video || !caption) return;
+
+    const tracks = Array.from(video.textTracks);
+    tracks.forEach((track) => {
+      if (track.mode === 'showing') track.mode = 'hidden';
+    });
+    const active = tracks.find((track) => track.mode !== 'disabled');
+
+    const paint = () => {
+      const cues = active?.activeCues;
+      const text = cues
+        ? Array.from(cues)
+            .map((cue) => (cue as { text?: string }).text ?? '')
+            .join('\n')
+        : '';
+      caption.textContent = text;
+      caption.style.display = text ? 'block' : 'none';
+    };
+
+    active?.addEventListener('cuechange', paint);
+    // A safety net for the moment a new track replaces the old one.
+    video.addEventListener('timeupdate', paint);
+    paint();
+
+    return () => {
+      active?.removeEventListener('cuechange', paint);
+      video.removeEventListener('timeupdate', paint);
+      tracks.forEach((track) => {
+        if (track.mode === 'hidden') track.mode = subtitlesEnabled ? 'showing' : 'disabled';
+      });
+    };
+  }, [docPipActive, rawVtt, subtitleDelay, subtitlesEnabled, activeSubtitle]);
 
   // The intro window is advertised as [start, end]; the button appears only
   // while playback is inside it.
@@ -597,13 +801,10 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
         onDurationChange={handleLoadedMetadata}
-        onPlay={() => {
-          setIsPlaying(true);
-          setShowNextUp(false);
-        }}
-        onPause={() => setIsPlaying(false)}
-        onWaiting={() => setIsLoading(true)}
-        onPlaying={() => setIsLoading(false)}
+        onPlay={handlePlay}
+        onPause={handlePause}
+        onWaiting={handleWaiting}
+        onPlaying={handlePlaying}
         onEnded={handleEnded}
       />
 
@@ -777,12 +978,17 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
             ))}
           </select>
 
-          {pipSupported && (
+          {pipMode && (
             <button
               type="button"
               onClick={() => void togglePictureInPicture()}
               aria-label="Picture in picture"
-              title="Picture in picture"
+              title={
+                pipMode === 'document'
+                  ? 'Picture in picture with subtitles'
+                  : 'Picture in picture'
+              }
+              className={docPipActive ? 'text-anime-purple' : undefined}
             >
               <PictureInPicture2 className="h-5 w-5" />
             </button>

@@ -50,6 +50,12 @@ const ALLOWED_DOMAINS = [
   // Vidplay's current manifest host. It rotates its numbered subdomain, so the
   // registrable domain is allow-listed and the suffix check covers the rest.
   'crystaldrift.world',
+  // MegaPlay serves its WebVTT caption files from these hosts. They reject
+  // browser requests outright (Cloudflare answers 403 unless the referer and
+  // origin are the megaplay player), so the client must route them through the
+  // proxy like the playlists. The subdomain rotates per episode.
+  'distantdaydreams.org',
+  'emeralddrift.world',
 ];
 
 /** True when `hostname` is one of the allowed domains or a subdomain of one. */
@@ -133,6 +139,9 @@ const CDN_REFERERS: Array<{ domain: string; referer: string }> = [
   { domain: 'dpopdrop89.store', referer: 'https://play.echovideo.ru/' },
   { domain: 'roburnt10.store', referer: 'https://play.echovideo.ru/' },
   { domain: 'crystaldrift.world', referer: 'https://megaplay.buzz/' },
+  // Caption hosts answer only the megaplay player that listed them.
+  { domain: 'distantdaydreams.org', referer: 'https://megaplay.buzz/' },
+  { domain: 'emeralddrift.world', referer: 'https://megaplay.buzz/' },
 ];
 
 /** Default referer, used when no target host is supplied. */
@@ -370,7 +379,10 @@ export async function proxyFetch(
 
   const decoder = new TextDecoder('utf-8', { fatal: false });
   const head = decoder.decode(first.value.subarray(0, 64)).replace(/^\uFEFF/, '').trimStart();
-  if (head.startsWith('#EXTM3U')) {
+  // Caption files are small text documents too, and the caption hosts label
+  // them `application/octet-stream`; sniff them so the player gets WebVTT.
+  const isCueFile = head.startsWith('WEBVTT');
+  if (head.startsWith('#EXTM3U') || isCueFile) {
     const chunks: Uint8Array[] = [first.value];
     for (;;) {
       const next = await reader.read();
@@ -378,6 +390,13 @@ export async function proxyFetch(
       if (next.value) chunks.push(next.value);
     }
     const text = decoder.decode(concatBytes(chunks));
+    if (isCueFile) {
+      return {
+        status: 200,
+        body: text,
+        headers: { ...headers, 'Content-Type': 'text/vtt; charset=utf-8' },
+      };
+    }
     return {
       status: 200,
       body: await rewriteManifest(text, target.url, proxyBase),
