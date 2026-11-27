@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Calendar,
+  Check,
   Clock,
   Download,
   Heart,
@@ -13,7 +14,6 @@ import {
 } from 'lucide-react';
 import Header from '../components/Header';
 import CategoryRow from '../components/CategoryRow';
-import DownloadPanel from '../components/DownloadPanel';
 import { useAnimeDetail, useSimilarAnime, type AnimeData } from '../hooks/useAnimeData';
 import { useAnimeCharacters, useAnimeReviews } from '../hooks/useAnimeDetails';
 import { getEpisodes, type EpisodeSummary } from '../services/animeApiService';
@@ -22,7 +22,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
-import { addToWatchlist, isInWatchlist, removeFromWatchlist } from '@/services/localLibrary';
+import { addToWatchlist, getLibrary, isInWatchlist, removeFromWatchlist } from '@/services/localLibrary';
 
 const AnimeDetails = () => {
   const { id = '' } = useParams();
@@ -31,7 +31,7 @@ const AnimeDetails = () => {
   const { data: similar = [] } = useSimilarAnime(id);
   const { data: characters = [] } = useAnimeCharacters(anime?.title ?? '');
   const { data: reviews = [] } = useAnimeReviews(id);
-  const { enqueue } = useDownloads();
+  const { enqueue, ensureFolder } = useDownloads();
 
   const [episodes, setEpisodes] = useState<EpisodeSummary[]>([]);
   const [savedToWatchlist, setSavedToWatchlist] = useState(false);
@@ -54,6 +54,37 @@ const AnimeDetails = () => {
     setSavedToWatchlist(isInWatchlist(id));
   }, [id]);
 
+  // Resume state and per-episode progress come from the same device library
+  // the player writes to, so this page can offer "Continue E4" instead of
+  // always starting over at episode one.
+  const [history, setHistory] = useState(() => getLibrary().history);
+
+  useEffect(() => {
+    const sync = () => setHistory(getLibrary().history);
+    window.addEventListener('nyanime:library-changed', sync);
+    return () => window.removeEventListener('nyanime:library-changed', sync);
+  }, []);
+
+  const seriesIds = useMemo(
+    () => new Set([id, anime?.dataId, anime?.id].filter(Boolean).map(String)),
+    [id, anime],
+  );
+
+  const resume = useMemo(() => {
+    const entry = history.find((item) => seriesIds.has(item.animeId));
+    if (!entry || entry.progress >= 95 || entry.timestamp < 5) return null;
+    return entry;
+  }, [history, seriesIds]);
+
+  const progressByEpisode = useMemo(() => {
+    const map = new Map<number, { progress: number; timestamp: number }>();
+    for (const entry of history) {
+      if (!seriesIds.has(entry.animeId) || map.has(entry.episodeId)) continue;
+      map.set(entry.episodeId, { progress: entry.progress, timestamp: entry.timestamp });
+    }
+    return map;
+  }, [history, seriesIds]);
+
   const handleToggleWatchlist = () => {
     if (savedToWatchlist) {
       removeFromWatchlist(id);
@@ -66,12 +97,27 @@ const AnimeDetails = () => {
     toast({ title: 'Added to watchlist', description: anime?.title ?? 'Anime added.' });
   };
 
-  const downloadAll = () => {
+  const downloadAll = async () => {
     if (!anime || episodes.length === 0) return;
-    const added = enqueue(anime.title, episodes);
+    // Ask for a folder once, while the click still counts as a user gesture.
+    await ensureFolder();
+    const added = enqueue(anime.title, episodes, { seriesId: id, poster: anime.poster });
     toast({
       title: added > 0 ? `Queued ${added} episodes` : 'Already queued',
-      description: added > 0 ? 'Track progress in the downloads panel.' : undefined,
+      description: added > 0 ? 'Progress and finished files are in the downloads dock.' : undefined,
+    });
+  };
+
+  const downloadEpisode = async (episode: EpisodeSummary) => {
+    if (!anime) return;
+    const folder = await ensureFolder();
+    const added = enqueue(anime.title, [episode], { seriesId: id, poster: anime.poster });
+    toast({
+      title: added > 0 ? `Queued episode ${episode.number}` : 'Already queued',
+      description:
+        added > 0
+          ? `Saving to ${folder?.name ?? 'your downloads folder'} — progress is in the downloads dock.`
+          : 'That episode is already in the download queue.',
     });
   };
 
@@ -168,10 +214,20 @@ const AnimeDetails = () => {
                 {anime.status && <span>{anime.status}</span>}
               </div>
               <div className="flex flex-wrap gap-3">
-                <Button onClick={() => navigate(`/anime/${id}/watch`)}>
-                  <Play className="mr-2 h-4 w-4" />
-                  Watch now
-                </Button>
+                {resume ? (
+                  <Button asChild>
+                    <Link to={`/anime/${id}/watch?ep=${resume.episodeId}&t=${resume.timestamp}`}>
+                      <Play className="mr-2 h-4 w-4" />
+                      Continue E{resume.episodeId}
+                      {resume.progress > 0 ? ` · ${Math.round(resume.progress)}%` : ''}
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button onClick={() => navigate(`/anime/${id}/watch`)}>
+                    <Play className="mr-2 h-4 w-4" />
+                    Watch now
+                  </Button>
+                )}
                 <Button variant="secondary" onClick={handleToggleWatchlist}>
                   {savedToWatchlist ? (
                     <>
@@ -243,7 +299,7 @@ const AnimeDetails = () => {
                 {episodes.length === 0 ? (
                   <p className="text-sm text-white/60">No episodes listed yet.</p>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                  <div className="glass-card max-h-[32rem] divide-y divide-white/5 overflow-y-auto rounded-xl">
                     {episodes.map((episode) => {
                       // Titles are often just "Episode 3"; only print a title
                       // when it actually says something beyond the number.
@@ -251,17 +307,64 @@ const AnimeDetails = () => {
                         .replace(/^Episode\s*\d+\s*/i, '')
                         .replace(/^[-\u2013:]\s*/, '')
                         .trim();
+                      const watched = progressByEpisode.get(episode.number);
+                      const isWatched = Boolean(watched && watched.progress >= 90);
+                      const resumeAt =
+                        watched && watched.progress > 0 && watched.progress < 90 ? watched : null;
+                      const href = `/anime/${id}/watch?ep=${episode.number}${
+                        resumeAt ? `&t=${resumeAt.timestamp}` : ''
+                      }`;
                       return (
-                        <Button
+                        <div
                           key={episode.key}
-                          variant="secondary"
-                          className="justify-start"
-                          onClick={() => navigate(`/anime/${id}/watch?ep=${episode.number}`)}
+                          className="flex items-center gap-2 px-3 py-2.5 transition-colors hover:bg-white/5"
                         >
-                          <span className="truncate">
-                            {cleanTitle ? `${episode.number}. ${cleanTitle}` : `Episode ${episode.number}`}
-                          </span>
-                        </Button>
+                          <Link to={href} className="flex min-w-0 flex-1 items-center gap-3">
+                            <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white/5 text-xs font-semibold text-white/70">
+                              {isWatched ? (
+                                <Check className="h-4 w-4 text-emerald-400" />
+                              ) : (
+                                episode.number
+                              )}
+                              {resumeAt && (
+                                <span className="absolute inset-x-1 bottom-1 h-0.5 overflow-hidden rounded bg-white/15">
+                                  <span
+                                    className="block h-full rounded bg-anime-purple"
+                                    style={{ width: `${resumeAt.progress}%` }}
+                                  />
+                                </span>
+                              )}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm text-white">
+                                {cleanTitle
+                                  ? `${episode.number}. ${cleanTitle}`
+                                  : `Episode ${episode.number}`}
+                              </span>
+                              <span className="block text-[11px] text-white/40">
+                                {isWatched
+                                  ? 'Watched'
+                                  : resumeAt
+                                    ? `${Math.round(resumeAt.progress)}% watched`
+                                    : 'Not started'}
+                              </span>
+                            </span>
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => void downloadEpisode(episode)}
+                            aria-label={`Download episode ${episode.number}`}
+                            title="Download this episode"
+                            className="rounded-md p-2 text-white/45 transition-colors hover:bg-white/10 hover:text-white"
+                          >
+                            <Download className="h-4 w-4" />
+                          </button>
+                          <Button size="sm" variant="secondary" asChild>
+                            <Link to={href} aria-label={`Play episode ${episode.number}`}>
+                              <Play className="h-3.5 w-3.5" />
+                            </Link>
+                          </Button>
+                        </div>
                       );
                     })}
                   </div>
@@ -292,7 +395,6 @@ const AnimeDetails = () => {
           </div>
 
           <aside className="space-y-5">
-            <DownloadPanel />
             {reviews.length > 0 && (
               <section className="glass-card p-4">
                 <h2 className="mb-3 text-sm font-semibold text-white">Reviews</h2>

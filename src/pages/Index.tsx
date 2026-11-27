@@ -1,14 +1,18 @@
 import React, { useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { ChevronRight, Play } from 'lucide-react';
 import Header from '../components/Header';
 import CategoryRow from '../components/CategoryRow';
 import ContinueWatching from '../components/ContinueWatching';
-import DownloadPanel from '../components/DownloadPanel';
+import HeroBillboard, { type BillboardSlide } from '../components/HeroBillboard';
+import TopTenRow from '../components/TopTenRow';
 import QuestInstallPrompt from '../components/QuestInstallPrompt';
-import { useHomeData, usePopularAnime, useSeasonalAnime, useTrendingAnime, type AnimeData } from '../hooks/useAnimeData';
-import { GridSkeleton } from '../components/LoadingSkeletons';
-import { Button } from '@/components/ui/button';
+import {
+  useHomeData,
+  usePopularAnime,
+  useSeasonalAnime,
+  useTrendingAnime,
+  type AnimeData,
+} from '../hooks/useAnimeData';
+import { GridSkeleton, HeroSkeleton } from '../components/LoadingSkeletons';
 
 const asCardList = (items: AnimeData[]) =>
   items.map((item) => ({
@@ -21,83 +25,34 @@ const asCardList = (items: AnimeData[]) =>
     episodes: item.episodes,
   }));
 
-/**
- * A static hero. The previous version cross-faded background images on a timer,
- * which kept a large composited layer alive and woke the CPU every few seconds
- * for no benefit; a single spotlight renders once and then idles.
- */
-const Hero = ({ spotlight }: { spotlight?: AnimeData }) => {
-  if (!spotlight) {
-    return <div className="h-[60vh] w-full bg-anime-darker md:h-[70vh]" />;
-  }
-  return (
-    <section className="relative h-[60vh] w-full overflow-hidden md:h-[70vh]">
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage: `linear-gradient(to bottom, rgba(13,13,21,0.5), rgba(13,13,21,0.95)), url('${spotlight.image}')`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      />
-      <div className="relative z-10 flex h-full flex-col justify-end">
-        <div className="container mx-auto px-4 pb-16 md:px-6 md:pb-20">
-          {/* A plain translucent panel. The WebGL glass surface rendered as an
-              opaque white card over the artwork in practice. */}
-          <div className="max-w-3xl rounded-2xl border border-white/15 bg-black/55 p-6 shadow-lg backdrop-blur-md">
-            <span className="mb-3 inline-block rounded-full bg-anime-purple/20 px-3 py-1 text-xs font-medium text-white">
-              Spotlight
-            </span>
-            <h1 className="mb-3 text-3xl font-bold leading-tight text-white md:text-5xl">
-              {spotlight.title}
-            </h1>
-            {spotlight.synopsis && (
-              <p className="mb-6 max-w-2xl text-sm text-white/80 md:text-base">
-                {spotlight.synopsis.length > 220
-                  ? `${spotlight.synopsis.slice(0, 220)}…`
-                  : spotlight.synopsis}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-3">
-              <Button asChild>
-                <Link to={`/anime/${spotlight.id}/watch`}>
-                  <Play className="mr-2 h-4 w-4" />
-                  Watch now
-                </Link>
-              </Button>
-              <Button variant="secondary" asChild>
-                <Link to={`/anime/${spotlight.id}`}>
-                  More info
-                  <ChevronRight className="ml-1 h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-};
-
 const Index = () => {
-  const { data: home } = useHomeData();
+  const { data: home, isLoading: homeLoading } = useHomeData();
   const { data: trending = [], isLoading: trendingLoading } = useTrendingAnime();
   const { data: popular = [], isLoading: popularLoading } = usePopularAnime();
   const { data: seasonal = [] } = useSeasonalAnime();
-  const spotlight = useMemo(() => {
-    const first = home?.spotlights?.[0];
-    if (!first) return undefined;
-    return {
-      id: first.dataId,
-      slug: first.id,
-      title: first.title,
-      image: first.poster ?? '',
-      category: first.showType ?? 'Anime',
-      rating: 'N/A',
-      year: 'N/A',
-      synopsis: first.description,
-    } satisfies AnimeData;
-  }, [home]);
+
+  // Every spotlight is reachable from the billboard, not just the first one.
+  const slides = useMemo<BillboardSlide[]>(
+    () =>
+      (home?.spotlights ?? []).slice(0, 5).map((spotlight) => ({
+        id: spotlight.dataId || spotlight.id,
+        title: spotlight.title,
+        image: spotlight.poster ?? '',
+        synopsis: spotlight.description,
+        type: spotlight.showType,
+        episodes: spotlight.eps,
+        rating: spotlight.rating,
+        audio:
+          spotlight.dub && spotlight.sub
+            ? 'Sub & Dub'
+            : spotlight.dub
+              ? 'Dub'
+              : spotlight.sub
+                ? 'Sub'
+                : undefined,
+      })),
+    [home],
+  );
 
   const newAnime = useMemo(
     () => popular.filter((anime) => Number(anime.year) >= 2023).slice(0, 10),
@@ -105,13 +60,14 @@ const Index = () => {
   );
 
   const isLoading = trendingLoading && popularLoading;
+  const topTen = asCardList(trending).slice(0, 10);
 
   return (
     <div className="min-h-screen bg-anime-darker">
       <Header />
 
       <main>
-        <Hero spotlight={spotlight} />
+        {homeLoading && slides.length === 0 ? <HeroSkeleton /> : <HeroBillboard slides={slides} />}
         <QuestInstallPrompt />
         <ContinueWatching />
 
@@ -119,6 +75,7 @@ const Index = () => {
           <GridSkeleton />
         ) : (
           <>
+            <TopTenRow title="Top 10 on NyAnime Today" seeAllLink="/anime?category=trending" items={topTen} />
             <CategoryRow title="Trending Now" seeAllLink="/anime?category=trending" animeList={asCardList(trending)} />
             <CategoryRow title="Popular This Season" seeAllLink="/anime?category=popular" animeList={asCardList(popular)} />
             {newAnime.length > 0 && (
@@ -129,10 +86,6 @@ const Index = () => {
             )}
           </>
         )}
-
-        <section className="container mx-auto px-4 pb-12 md:px-6">
-          <DownloadPanel />
-        </section>
       </main>
     </div>
   );

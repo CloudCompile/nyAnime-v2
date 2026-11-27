@@ -1,8 +1,24 @@
 import React, { useEffect, useState } from "react";
-import { Play, Star, Calendar, List, Heart } from "lucide-react";
+import {
+  BookmarkCheck,
+  BookmarkPlus,
+  Calendar,
+  Heart,
+  Info,
+  List,
+  ListVideo,
+  Play,
+  Star,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
-import { isFavorite as isStoredFavorite, toggleFavorite } from "@/services/localLibrary";
+import {
+  addToWatchlist,
+  isFavorite as isStoredFavorite,
+  isInWatchlist,
+  removeFromWatchlist,
+  toggleFavorite,
+} from "@/services/localLibrary";
 
 interface AnimeCardProps {
   id: string;
@@ -29,10 +45,19 @@ const AnimeCard = ({
 }: AnimeCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isFavorite, setIsFavorite] = useState(() => isStoredFavorite(id));
+  const [isSaved, setIsSaved] = useState(() => isInWatchlist(id));
   const navigate = useNavigate();
 
+  // Both lists live in the same device store, so a change made on another card
+  // or on the details page has to reach this card's buttons.
   useEffect(() => {
-    setIsFavorite(isStoredFavorite(id));
+    const sync = () => {
+      setIsFavorite(isStoredFavorite(id));
+      setIsSaved(isInWatchlist(id));
+    };
+    sync();
+    window.addEventListener("nyanime:library-changed", sync);
+    return () => window.removeEventListener("nyanime:library-changed", sync);
   }, [id]);
 
   const openDetails = () => navigate(`/anime/${id}`);
@@ -47,6 +72,29 @@ const AnimeCard = ({
   const handlePlay = (event: React.MouseEvent) => {
     event.stopPropagation();
     navigate(`/anime/${id}/watch`);
+  };
+
+  const handleEpisodes = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    navigate(`/anime/${id}/watch`);
+  };
+
+  const handleInfo = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    openDetails();
+  };
+
+  const handleWatchlist = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    const nowSaved = !isSaved;
+    if (nowSaved) addToWatchlist(id);
+    else removeFromWatchlist(id);
+    setIsSaved(nowSaved);
+    toast({
+      title: nowSaved ? "Added to My List" : "Removed from My List",
+      description: title,
+      duration: 2500,
+    });
   };
 
   const handleFavorite = (event: React.MouseEvent) => {
@@ -69,6 +117,9 @@ const AnimeCard = ({
     event.stopPropagation();
     navigate(`/anime?genre=${encodeURIComponent(firstGenre)}`);
   };
+
+  const actionClass =
+    "grid h-8 w-8 place-items-center rounded-full border border-white/30 bg-black/45 text-white transition-colors hover:border-white/70 hover:bg-white/15";
 
   return (
     <div
@@ -143,11 +194,45 @@ const AnimeCard = ({
           type="button"
           onClick={handlePlay}
           aria-label={`Play ${title}`}
-          className="flex h-11 w-11 items-center justify-center rounded-full bg-anime-purple transition-colors hover:bg-anime-purple/90"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-anime-purple transition-colors hover:bg-anime-purple/90"
         >
-          <Play className="h-5 w-5 text-white" fill="currentColor" />
+          <Play className="h-4 w-4 text-white" fill="currentColor" />
         </button>
         <h3 className="line-clamp-2 text-center text-sm font-semibold text-white">{title}</h3>
+
+        {/* The quick-action row a hover card is for: play, keep, browse
+            episodes, or open the full page. */}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handleWatchlist}
+            aria-label={isSaved ? `Remove ${title} from My List` : `Add ${title} to My List`}
+            aria-pressed={isSaved}
+            title={isSaved ? "Remove from My List" : "Add to My List"}
+            className={`${actionClass} ${isSaved ? "!border-anime-purple/60 !text-anime-purple" : ""}`}
+          >
+            {isSaved ? <BookmarkCheck className="h-4 w-4" /> : <BookmarkPlus className="h-4 w-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={handleEpisodes}
+            aria-label={`Browse episodes of ${title}`}
+            title="Episodes"
+            className={actionClass}
+          >
+            <ListVideo className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleInfo}
+            aria-label={`More information about ${title}`}
+            title="More info"
+            className={actionClass}
+          >
+            <Info className="h-4 w-4" />
+          </button>
+        </div>
+
         {!compact && (
           <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
             <span className="flex items-center text-white/70">
@@ -162,13 +247,15 @@ const AnimeCard = ({
             ) : null}
           </div>
         )}
-        <button
-          type="button"
-          onClick={handleCategoryClick}
-          className="max-w-full truncate rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-anime-purple/20"
-        >
-          {firstGenre}
-        </button>
+        {!compact && (
+          <button
+            type="button"
+            onClick={handleCategoryClick}
+            className="max-w-full truncate rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-anime-purple/20"
+          >
+            {firstGenre}
+          </button>
+        )}
       </div>
     </div>
   );

@@ -27,6 +27,7 @@ import {
   sanitizeName,
   type FileSink,
 } from './sink';
+import { loadJobs, saveJobs } from './storage';
 
 export type JobStatus = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled';
 export type OutputFormat = 'mp4' | 'ts';
@@ -34,8 +35,14 @@ export type OutputFormat = 'mp4' | 'ts';
 export interface DownloadJob {
   id: string;
   seriesTitle: string;
+  /** Catalogue id, so a saved episode can link back to its series. */
+  seriesId?: string;
+  /** Poster URL, used as the queue thumbnail. */
+  poster?: string | null;
   episode: EpisodeSummary;
   status: JobStatus;
+  /** When the viewer added it to the queue. */
+  enqueuedAt: number;
   /** Segments downloaded / total, or null before the playlist is known. */
   completed: number | null;
   total: number | null;
@@ -137,7 +144,16 @@ export class DownloadManager {
   private controllers = new Map<string, AbortController>();
   private sequence = 0;
 
-  constructor(private options: ManagerOptions = DEFAULT_OPTIONS) {}
+  constructor(private options: ManagerOptions = DEFAULT_OPTIONS) {
+    // Records of finished and interrupted jobs survive a reload. A job that was
+    // mid-flight comes back as a retryable failure, because its file handle is
+    // gone with the old page.
+    this.jobs = loadJobs();
+    this.sequence = this.jobs.reduce((highest, job) => {
+      const index = Number(job.id.split('-').pop());
+      return Number.isFinite(index) ? Math.max(highest, index) : highest;
+    }, 0);
+  }
 
   setOptions(options: Partial<ManagerOptions>): void {
     this.options = { ...this.options, ...options };
@@ -167,7 +183,11 @@ export class DownloadManager {
     }, UPDATE_INTERVAL_MS);
   }
 
-  enqueue(seriesTitle: string, episodes: EpisodeSummary[]): number {
+  enqueue(
+    seriesTitle: string,
+    episodes: EpisodeSummary[],
+    meta: { seriesId?: string; poster?: string | null } = {},
+  ): number {
     let added = 0;
     for (const episode of episodes) {
       const existing = this.jobs.find(
@@ -179,8 +199,11 @@ export class DownloadManager {
       this.jobs.push({
         id: `job-${++this.sequence}`,
         seriesTitle,
+        seriesId: meta.seriesId,
+        poster: meta.poster ?? null,
         episode,
         status: 'queued',
+        enqueuedAt: Date.now(),
         completed: null,
         total: null,
         bytes: 0,
@@ -197,6 +220,7 @@ export class DownloadManager {
       added++;
     }
     this.notify();
+    if (added > 0) this.persist();
     this.pump();
     return added;
   }
@@ -211,6 +235,7 @@ export class DownloadManager {
       this.controllers.get(id)?.abort();
     }
     this.notify();
+    this.persist();
   }
 
   cancelAll(): void {
@@ -222,6 +247,64 @@ export class DownloadManager {
       (job) => job.status === 'queued' || job.status === 'running' || job.status === 'paused',
     );
     this.notify();
+    this.persist();
+  }
+
+  /** Requeue a failed or cancelled job from the start. */
+  retry(id: string): boolean {
+    const job = this.jobs.find((entry) => entry.id === id);
+    if (!job || (job.status !== 'failed' && job.status !== 'cancelled')) return false;
+    this.resetJob(job);
+    this.notify();
+    this.persist();
+    this.pump();
+    return true;
+  }
+
+  /** Requeue every failed or cancelled job. Returns how many were restarted. */
+  retryFailed(): number {
+    let restarted = 0;
+    for (const job of this.jobs) {
+      if (job.status === 'failed' || job.status === 'cancelled') {
+        this.resetJob(job);
+        restarted++;
+      }
+    }
+    if (restarted > 0) {
+      this.notify();
+      this.persist();
+      this.pump();
+    }
+    return restarted;
+  }
+
+  /** Drop a job from the list. A running job is aborted first. */
+  remove(id: string): void {
+    const job = this.jobs.find((entry) => entry.id === id);
+    if (!job) return;
+    if (job.status === 'running') this.controllers.get(id)?.abort();
+    this.jobs = this.jobs.filter((entry) => entry.id !== id);
+    this.notify();
+    this.persist();
+  }
+
+  private resetJob(job: DownloadJob): void {
+    job.status = 'queued';
+    job.completed = null;
+    job.total = null;
+    job.bytes = 0;
+    job.fileSize = null;
+    job.filename = null;
+    job.error = null;
+    job.startedAt = null;
+    job.finishedAt = null;
+    job.speed = null;
+    job.eta = null;
+    job.retryAt = null;
+    job.rateLimitRetries = 0;
+    job.speedSampleAt = undefined;
+    job.speedSampleBytes = undefined;
+    job.enqueuedAt = Date.now();
   }
 
   dispose(): void {
@@ -231,6 +314,11 @@ export class DownloadManager {
     this.retryTimers.clear();
     this.cancelAll();
     this.listeners.clear();
+  }
+
+  /** Mirror the queue to storage, so a reload keeps its history. */
+  private persist(): void {
+    saveJobs(this.jobs);
   }
 
   /** Start as many queued jobs as the concurrency limit allows. */
@@ -270,6 +358,7 @@ export class DownloadManager {
     } finally {
       this.controllers.delete(job.id);
       this.running--;
+      this.persist();
       this.notify();
       this.pump();
     }
@@ -291,6 +380,7 @@ export class DownloadManager {
       job.retryAt = null;
       job.status = 'queued';
       this.notify();
+      this.persist();
       this.pump();
     }, RATE_LIMIT_RETRY_MS);
     this.retryTimers.add(timer);
@@ -465,6 +555,13 @@ export function describeJob(job: DownloadJob): string {
     return `${progress}${rate}${eta}`;
   }
   return 'Starting…';
+}
+
+/** 0–100 while the segment total is known, otherwise null. */
+export function jobPercent(job: DownloadJob): number | null {
+  if (job.status === 'done') return 100;
+  if (job.completed === null || !job.total) return null;
+  return Math.min(100, (job.completed / job.total) * 100);
 }
 
 export { proxied };

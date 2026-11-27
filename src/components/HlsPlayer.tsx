@@ -2,17 +2,20 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Hls, { type Level } from 'hls.js';
 import {
   Captions,
+  FastForward,
   Glasses,
   Loader2,
   Maximize,
   Minimize,
   Pause,
+  PictureInPicture2,
   Play,
   Rewind,
   SkipForward,
   Volume2,
   VolumeX,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import type { SubtitleTrack } from '../services/animeApiService';
 import { maybeProxy } from '../lib/stream';
 import { looksLikeVtt, shiftVtt } from '../lib/subtitles';
@@ -28,6 +31,10 @@ export interface HlsPlayerProps {
   /** Called with the current position, throttled to a few seconds. */
   onProgress?: (seconds: number, duration: number) => void;
   onEnded?: () => void;
+  /** Label of the episode queued after this one, e.g. "Episode 5". */
+  nextUpLabel?: string;
+  /** Play the next episode; enables the end-of-episode countdown. */
+  onNext?: () => void;
   subtitles?: SubtitleTrack[];
   /** Intro/outro windows in seconds, when the source advertises them. */
   intro?: number[];
@@ -43,6 +50,8 @@ export interface HlsPlayerProps {
 const PROGRESS_REPORT_INTERVAL_MS = 5000;
 const CONTROLS_HIDE_DELAY_MS = 2800;
 const DELAY_STEP_SECONDS = 0.25;
+const NEXT_UP_SECONDS = 10;
+const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 
 const formatTime = (seconds: number): string => {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -72,6 +81,8 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
   autoPlay = false,
   onProgress,
   onEnded,
+  nextUpLabel,
+  onNext,
   subtitles = [],
   intro = [],
   outro = [],
@@ -107,11 +118,21 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
   const [xrSupported, setXrSupported] = useState(false);
   const [theaterBusy, setTheaterBusy] = useState(false);
   const [theaterError, setTheaterError] = useState<string | null>(null);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [pipSupported, setPipSupported] = useState(false);
+  const [showNextUp, setShowNextUp] = useState(false);
+  const [nextUpCountdown, setNextUpCountdown] = useState(NEXT_UP_SECONDS);
   // Preloaded so the VR click can request the session synchronously, without
   // an intervening `await import()` that could spend the user activation.
   const theaterModuleRef = useRef<typeof import('../vr/theater') | null>(null);
 
   const playableSrc = useMemo(() => maybeProxy(src), [src]);
+
+  // Picture-in-picture is a browser capability, not a given; the control only
+  // exists where the API does.
+  useEffect(() => {
+    setPipSupported(Boolean(document.pictureInPictureEnabled));
+  }, []);
 
   const subtitleTracks = useMemo(
     () =>
@@ -332,6 +353,39 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
     bumpControls();
   }, [bumpControls]);
 
+  const handleEnded = useCallback(() => {
+    if (onNext) {
+      setNextUpCountdown(NEXT_UP_SECONDS);
+      setShowNextUp(true);
+      return;
+    }
+    onEnded?.();
+  }, [onEnded, onNext]);
+
+  // The only timer in the player, and it runs only in the ten seconds between
+  // one episode ending and the next starting.
+  useEffect(() => {
+    if (!showNextUp) return;
+    if (nextUpCountdown <= 0) {
+      setShowNextUp(false);
+      onNext?.();
+      return;
+    }
+    const timer = window.setTimeout(() => setNextUpCountdown((value) => value - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [showNextUp, nextUpCountdown, onNext]);
+
+  const togglePictureInPicture = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video) return;
+    try {
+      if (document.pictureInPictureElement) await document.exitPictureInPicture();
+      else await video.requestPictureInPicture();
+    } catch {
+      // The browser can refuse while a stream is loading; nothing to report.
+    }
+  }, []);
+
   useEffect(() => {
     const onFullscreenChange = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
@@ -374,14 +428,21 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
     const onKeyDown = (event: KeyboardEvent) => {
       const video = videoRef.current;
       if (!video) return;
+      // Arrow keys inside the quality or speed menu belong to that menu.
+      if (event.target instanceof HTMLSelectElement || event.target instanceof HTMLInputElement) return;
       if (event.key === ' ' || event.key === 'k') {
-        event.preventDefault();
         if (video.paused) void video.play().catch(() => undefined);
         else video.pause();
       } else if (event.key === 'ArrowRight') {
-        video.currentTime = Math.min(video.duration || 0, video.currentTime + 5);
+        video.currentTime = Math.min(video.duration || 0, video.currentTime + 10);
       } else if (event.key === 'ArrowLeft') {
-        video.currentTime = Math.max(0, video.currentTime - 5);
+        video.currentTime = Math.max(0, video.currentTime - 10);
+      } else if (event.key === 'ArrowUp') {
+        video.muted = false;
+        video.volume = Math.min(1, video.volume + 0.1);
+        setIsMuted(false);
+      } else if (event.key === 'ArrowDown') {
+        video.volume = Math.max(0, video.volume - 0.1);
       } else if (event.key === 'm') {
         video.muted = !video.muted;
         setIsMuted(video.muted);
@@ -392,6 +453,7 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
       } else {
         return;
       }
+      event.preventDefault();
       bumpControls();
     };
     container.addEventListener('keydown', onKeyDown);
@@ -403,13 +465,15 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
     const video = videoRef.current;
     if (!video) return;
     setDuration(video.duration || 0);
+    // A new source resets the element's rate, so re-apply the chosen one.
+    video.playbackRate = playbackRate;
     // Seeking before the media is ready is ignored, so this runs once here.
     if (!appliedProgressRef.current && initialProgress > 1 && initialProgress < video.duration - 5) {
       video.currentTime = initialProgress;
       appliedProgressRef.current = true;
     }
     setIsLoading(false);
-  }, [initialProgress]);
+  }, [initialProgress, playbackRate]);
 
   const handleTimeUpdate = useCallback(() => {
     const video = videoRef.current;
@@ -481,6 +545,18 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
     ? currentTime >= (introWindow[0] ?? 0) && currentTime < (introWindow[1] ?? 0)
     : false;
 
+  const outroWindow = outro.length >= 2 ? outro : null;
+  const inOutro = outroWindow
+    ? currentTime >= (outroWindow[0] ?? 0) && currentTime < (outroWindow[1] ?? 0)
+    : false;
+
+  // Skipping the credits is the same event as reaching the end: stop, then
+  // offer the next episode through the same countdown.
+  const skipCredits = () => {
+    videoRef.current?.pause();
+    handleEnded();
+  };
+
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const showBar = controlsVisible || !isPlaying;
 
@@ -521,11 +597,14 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
         onDurationChange={handleLoadedMetadata}
-        onPlay={() => setIsPlaying(true)}
+        onPlay={() => {
+          setIsPlaying(true);
+          setShowNextUp(false);
+        }}
         onPause={() => setIsPlaying(false)}
         onWaiting={() => setIsLoading(true)}
         onPlaying={() => setIsLoading(false)}
-        onEnded={onEnded}
+        onEnded={handleEnded}
       />
 
       {theaterError && (
@@ -540,14 +619,51 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
         </div>
       )}
 
-      {inIntro && introWindow && (
-        <button
-          className="absolute bottom-24 right-4 rounded-md bg-white/90 px-4 py-2 text-sm font-medium text-black hover:bg-white"
-          onClick={() => seekTo(introWindow[1] ?? currentTime)}
-        >
-          <SkipForward className="mr-1 inline h-4 w-4" />
-          Skip intro
-        </button>
+      {(inIntro || inOutro) && (
+        <div className="absolute bottom-24 right-4 z-20 flex flex-col items-end gap-2">
+          {inIntro && introWindow && (
+            <button
+              className="rounded-md bg-white/90 px-4 py-2 text-sm font-medium text-black hover:bg-white"
+              onClick={() => seekTo(introWindow[1] ?? currentTime)}
+            >
+              <SkipForward className="mr-1 inline h-4 w-4" />
+              Skip intro
+            </button>
+          )}
+          {inOutro && (
+            <button
+              className="rounded-md bg-white/90 px-4 py-2 text-sm font-medium text-black hover:bg-white"
+              onClick={skipCredits}
+            >
+              <SkipForward className="mr-1 inline h-4 w-4" />
+              Skip credits
+            </button>
+          )}
+        </div>
+      )}
+
+      {showNextUp && nextUpLabel && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-sm rounded-xl border border-white/10 bg-[#141420]/95 p-5 text-center shadow-2xl">
+            <p className="text-[11px] uppercase tracking-wide text-white/50">Next episode</p>
+            <p className="mt-1 text-lg font-semibold text-white">{nextUpLabel}</p>
+            <p className="mt-1 text-sm text-white/60">Playing in {nextUpCountdown}s</p>
+            <div className="mt-4 flex justify-center gap-2">
+              <Button
+                onClick={() => {
+                  setShowNextUp(false);
+                  onNext?.();
+                }}
+              >
+                <Play className="mr-1 h-4 w-4" fill="currentColor" />
+                Play now
+              </Button>
+              <Button variant="secondary" onClick={() => setShowNextUp(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Controls. The wrapper carries the visibility so the bar and the
@@ -579,10 +695,13 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
           <button onClick={() => skip(-10)} aria-label="Rewind 10 seconds">
             <Rewind className="h-5 w-5" />
           </button>
+          <button onClick={() => skip(10)} aria-label="Forward 10 seconds">
+            <FastForward className="h-5 w-5" />
+          </button>
           <button onClick={toggleMute} aria-label={isMuted ? 'Unmute' : 'Mute'}>
             {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
           </button>
-          <span className="text-xs tabular-nums">
+          <span className="hidden text-xs tabular-nums sm:inline">
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
           <div className="flex-1" />
@@ -639,6 +758,34 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
                 </option>
               ))}
             </select>
+          )}
+
+          <select
+            value={playbackRate}
+            onChange={(event) => {
+              const rate = Number(event.target.value);
+              setPlaybackRate(rate);
+              if (videoRef.current) videoRef.current.playbackRate = rate;
+            }}
+            aria-label="Playback speed"
+            className="hidden rounded bg-black/60 px-2 py-1 text-xs text-white sm:block"
+          >
+            {PLAYBACK_RATES.map((rate) => (
+              <option key={rate} value={rate}>
+                {rate === 1 ? 'Normal' : `${rate}x`}
+              </option>
+            ))}
+          </select>
+
+          {pipSupported && (
+            <button
+              type="button"
+              onClick={() => void togglePictureInPicture()}
+              aria-label="Picture in picture"
+              title="Picture in picture"
+            >
+              <PictureInPicture2 className="h-5 w-5" />
+            </button>
           )}
 
           {xrSupported && (

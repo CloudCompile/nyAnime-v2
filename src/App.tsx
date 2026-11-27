@@ -18,6 +18,7 @@ import NotFound from "./pages/NotFound";
 import Library from "./pages/Library";
 import AnimeList from "./pages/AnimeList";
 import NetworkStatus from "./components/NetworkStatus";
+import DownloadsDock from "./components/DownloadsDock";
 import { LiquidGlassDefs } from "./components/ui/liquid-glass";
 
 // three.js lives only on the theater route, so the main bundle stays small.
@@ -72,6 +73,7 @@ const App = () => (
       <NetworkStatus />
       <BrowserRouter>
         <StandaloneEntry />
+        <DownloadsDock />
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/anime" element={<AnimeList />} />

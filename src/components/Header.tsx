@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, Library, ChevronDown, TrendingUp, Flame, Glasses } from "lucide-react";
+import { Menu, X, Library, ChevronDown, TrendingUp, Flame, Glasses, Download } from "lucide-react";
 import SearchBar from "./SearchBar";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useDownloadCount } from "@/hooks/useDownloads";
+import { toggleDownloadDock } from "@/lib/download/ui";
 
 const categories = [
   "Action", "Comedy", "Drama", "Fantasy", "Horror", "Romance", "Sci-Fi", "Slice of Life",
@@ -19,6 +21,7 @@ const Header = () => {
   const [isCategoriesOpen, setIsCategoriesOpen] = useState(false);
   const isMobile = useIsMobile();
   const location = useLocation();
+  const downloadCount = useDownloadCount();
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 10);
@@ -119,6 +122,21 @@ const Header = () => {
 
           <div className="flex items-center gap-3 md:gap-4">
             <SearchBar />
+
+            <button
+              type="button"
+              onClick={toggleDownloadDock}
+              aria-label="Open downloads"
+              title="Downloads"
+              className="relative rounded-full p-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <Download className="h-5 w-5" />
+              {downloadCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-anime-purple px-1 text-[10px] font-semibold leading-none text-white">
+                  {downloadCount > 9 ? "9+" : downloadCount}
+                </span>
+              )}
+            </button>
 
             <Link
               to="/library"

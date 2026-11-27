@@ -220,6 +220,21 @@
     box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
   }
 
+  /* The ranked shelf. Outlined type reads as a graphic rather than a label,
+     which is the point: the number is the information. */
+  .rank-number {
+    color: transparent;
+    -webkit-text-stroke: 3px rgba(255, 255, 255, 0.35);
+    font-weight: 900;
+    letter-spacing: -0.08em;
+  }
+
+  @supports not (-webkit-text-stroke: 1px #fff) {
+    .rank-number {
+      color: rgba(255, 255, 255, 0.18);
+    }
+  }
+
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -231,6 +246,55 @@
 
   .text-balance {
     text-wrap: balance;
+  }
+
+  /* The downloads dock: a quiet rise on open, and a travelling sheen while a
+     job is writing segments. */
+  .download-dock {
+    animation: download-dock-in 0.22s ease-out both;
+  }
+
+  .download-progress {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .download-progress::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 25%,
+      rgba(255, 255, 255, 0.45) 50%,
+      transparent 75%
+    );
+    transform: translateX(-100%);
+    animation: download-sheen 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes download-dock-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes download-sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .download-dock,
+  .download-progress::after {
+    animation: none;
   }
 }
 

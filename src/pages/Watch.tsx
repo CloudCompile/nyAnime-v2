@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import Header from '../components/Header';
 import HlsPlayer from '../components/HlsPlayer';
-import DownloadPanel from '../components/DownloadPanel';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import {
@@ -30,13 +29,14 @@ import { useDownloads } from '../hooks/useDownloads';
 import { resolveSlug } from '../hooks/useAnimeData';
 import { rememberSlug } from '../lib/animeIds';
 import { loadSubtitleDelay, saveSubtitleDelay } from '../lib/subtitles';
+import { canStreamToDisk } from '../lib/download/sink';
 import { updateWatchHistory } from '../services/localLibrary';
 
 const Watch = () => {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { enqueue, options, setOptions, jobs } = useDownloads();
+  const { enqueue, options, setOptions, ensureFolder } = useDownloads();
 
   const episodeParam = Number(searchParams.get('ep') || '1');
   const [anime, setAnime] = useState<AnimeDetail | null>(null);
@@ -172,26 +172,35 @@ const Watch = () => {
     [anime, id],
   );
 
-  const downloadEpisodes = (list: EpisodeSummary[]) => {
+  const downloadEpisodes = async (list: EpisodeSummary[]) => {
     if (!anime || list.length === 0) return;
-    const added = enqueue(anime.title, list);
+    // One folder prompt for the whole batch; without it every episode would ask
+    // for a save location when its first segment arrives.
+    const folder = await ensureFolder();
+    const added = enqueue(anime.title, list, { seriesId: id, poster: anime.poster });
     toast({
       title: added > 0 ? `Queued ${added} episode${added === 1 ? '' : 's'}` : 'Already queued',
       description:
         added > 0
-          ? `Downloading to ${options.directory?.name ?? 'your chosen location'}`
+          ? `Saving to ${folder?.name ?? 'your downloads folder'} — progress is in the downloads dock.`
           : 'Those episodes are already in the download queue.',
     });
   };
 
   const handleDownloadCurrent = () => {
-    if (currentEpisode) downloadEpisodes([currentEpisode]);
+    if (currentEpisode) void downloadEpisodes([currentEpisode]);
   };
 
   const handleDownloadRange = () => {
     const from = Math.min(downloadRange.from, downloadRange.to);
     const to = Math.max(downloadRange.from, downloadRange.to);
-    downloadEpisodes(episodes.filter((episode) => episode.number >= from && episode.number <= to));
+    void downloadEpisodes(
+      episodes.filter((episode) => episode.number >= from && episode.number <= to),
+    );
+  };
+
+  const chooseFolder = async () => {
+    await ensureFolder();
   };
 
   const serverOptions = servers.filter((server) => server.type === trackType);
@@ -206,6 +215,8 @@ const Watch = () => {
     : -1;
   const canPrev = currentIndex > 0;
   const canNext = currentIndex >= 0 && currentIndex < episodes.length - 1;
+  // The player shows a countdown to this episode when the current one ends.
+  const nextEpisode = canNext ? episodes[currentIndex + 1] : null;
   const goPrev = () => {
     if (currentIndex > 0) selectEpisode(episodes[currentIndex - 1].number);
   };
@@ -294,7 +305,8 @@ const Watch = () => {
                 initialProgress={Number.isFinite(resumeSeconds) ? resumeSeconds : 0}
                 autoPlay
                 onProgress={handleProgress}
-                onEnded={goNext}
+                nextUpLabel={nextEpisode ? `Episode ${nextEpisode.number}` : undefined}
+                onNext={nextEpisode ? goNext : undefined}
                 subtitles={stream.tracks}
                 theaterTitle={anime?.title}
                 intro={stream.intro}
@@ -484,23 +496,33 @@ const Watch = () => {
                   </select>
                 </label>
               </div>
+              <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-white/40">
+                <span className="truncate">
+                  {options.directory
+                    ? `Saving to ${options.directory.name}`
+                    : canStreamToDisk()
+                      ? 'Pick a folder for one-click saving'
+                      : 'Saves to your browser downloads folder'}
+                </span>
+                {canStreamToDisk() && (
+                  <button
+                    type="button"
+                    onClick={chooseFolder}
+                    className="shrink-0 text-anime-purple hover:underline"
+                  >
+                    {options.directory ? 'Change' : 'Choose folder'}
+                  </button>
+                )}
+              </div>
               <p className="mt-2 text-[11px] leading-snug text-white/40">
                 Sources are 720p in practice; the closest available quality is used.
               </p>
             </section>
 
-            <DownloadPanel />
           </aside>
         </div>
       </main>
 
-      {jobs.length > 0 && (
-        <div className="pointer-events-none fixed bottom-0 left-0 right-0 lg:hidden">
-          <div className="pointer-events-auto mx-4 mb-4 rounded-lg bg-black/80 p-2 text-xs text-white">
-            {jobs.filter((job) => job.status === 'running').length} downloading
-          </div>
-        </div>
-      )}
     </div>
   );
 };
