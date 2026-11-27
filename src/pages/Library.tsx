@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import Header from '../components/Header';
 import AnimeCard from '../components/AnimeCard';
+import DownloadsLibrary from '../components/DownloadsLibrary';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Clock3, Heart, Library as LibraryIcon } from 'lucide-react';
+import { Clock3, Download, Heart, Library as LibraryIcon } from 'lucide-react';
 import { getLibrary } from '@/services/localLibrary';
 import { fetchAnimeByRouteId } from '@/hooks/useAnimeData';
 
@@ -137,6 +138,9 @@ const Library = () => {
               <TabsTrigger value="favorites" className="text-sm">
                 Favorites
               </TabsTrigger>
+              <TabsTrigger value="downloads" className="text-sm">
+                <Download className="mr-2 h-4 w-4" /> Downloads
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="watchlist" className="mt-0">
@@ -149,6 +153,10 @@ const Library = () => {
 
             <TabsContent value="favorites" className="mt-0">
               {grid(favorites, 'No favourites yet.')}
+            </TabsContent>
+
+            <TabsContent value="downloads" className="mt-0">
+              <DownloadsLibrary />
             </TabsContent>
           </Tabs>
         )}
